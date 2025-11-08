@@ -192,7 +192,7 @@ document.querySelectorAll('.page-switch').forEach(btn => {
 // ---------------- Electron event listeners ----------------
 electronAPI.onWSScanProgress((data) => {
   if (scanState && scanState.type === 'ips') {
-    updateProgress(data.progress * 100);
+    // updateProgress(data.progress * 100);
   }
 });
 
@@ -213,6 +213,7 @@ electronAPI.onWSScanResult((data) => {
       if (cellElement) {
         cellElement.style.background = color;
       }
+      updateProgress((scanState.completed / scanState.ips.length) * 100);
       if (scanState.completed === scanState.ips.length) {
         updateProgress(100);
         addScanButtonsToModal();
@@ -468,7 +469,7 @@ function showModalScanIPs(ips, subnet) {
   const cols = Math.ceil(Math.sqrt(N));
   const size = Math.min(320 / cols, 32);
   const html = `<div style="display:flex;justify-content:space-between;align-items:center"><h3>扫描子网 ${subnet}</h3><div><button id="modalCloseX" title="停止并关闭">×</button></div></div>
-  <div id="gridContainer" style="display:grid; grid-template-columns:repeat(${cols},1fr); gap:2px; width:${cols * size + 30}px; height:${Math.ceil(N / cols) * size}px;"></div><div id="scanProgress">扫描中...</div>
+  <div id="gridContainer" style="display:grid; grid-template-columns:repeat(${cols},1fr); gap:2px; width:${cols * size + 30}px; height:${Math.ceil(N / cols) * size}px;"></div><div id="scanProgress" style="margin-top: 32px;">扫描中...</div>
   <div id="tooltip" style="display:none; position:absolute; background-color:rgba(0,0,0,0.8); color:white; padding:4px 8px; border-radius:4px; font-size:12px; pointer-events:none; z-index:1000;"></div>
  `;
   showModal(html);
@@ -667,6 +668,7 @@ function buildScanRangeFromSubnet(sn) {
 
 // ---------------- UDP position & tracks ----------------
 electronAPI.onUDPPosition((data) => {
+  console.log('UDP position data', data);
   const port = data.port;
   if (!tracks[port]) tracks[port] = [];
   tracks[port].push({ x: data.x, y: data.y, t: Date.now() });
