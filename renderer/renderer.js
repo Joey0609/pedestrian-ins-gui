@@ -229,7 +229,6 @@ let oldLength = 0;
 async function listConns() {
   const list = await electronAPI.listConnections();
   connections = list;
-  console.log('Listing connections, count=', oldLength, "->", connections.length);
   if (oldLength !== connections.length) {
     oldLength = connections.length;
     layoutGrid(true);
@@ -274,17 +273,20 @@ function layoutGrid(forceRebuild = false) {
     });
   }
 }
-
 function updateModelFromConn(model, conn) {
+  // console.log('updateModelFromConn called');
+  console.log('updateModelFromConn', conn.lastMsg.quat[4].toString());
   if (conn && conn.lastMsg && conn.lastMsg.quat) {
     try {
-      let q = conn.lastMsg.quat;
+      let q = conn.lastMsg.quat[4];
       if (Array.isArray(q) && Array.isArray(q[0])) q = q[0];
       const w = q[0], x = q[1], y = q[2], z = q[3];
       const threeQ = new THREE.Quaternion(x, y, z, w);
-      if (model.quaternion && typeof model.quaternion.copy === 'function') model.quaternion.copy(threeQ);
-      else model.quaternion = threeQ;
-    } catch (e) { /* ignore parse errors */ }
+      if (model.quaternion && typeof model.quaternion.copy === 'function') 
+        model.quaternion.copy(threeQ);
+      else 
+        model.quaternion = threeQ;
+    } catch (e) { console.error('updateModelFromConn quat error', e);}
   }
 }
 
@@ -398,7 +400,6 @@ function createAttitudeRenderer(container, conn) {
   new ResizeObserver(() => {
     const w = container.clientWidth || 320;
     const h = container.clientHeight-20 || 500;
-    console.log("resize2", w, h);
     renderer.setSize(w, h,false); 
     camera.aspect = w / h; if (typeof camera.updateProjectionMatrix === 'function') camera.updateProjectionMatrix();
   }).observe(container);
