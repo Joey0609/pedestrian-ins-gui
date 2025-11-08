@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>行迹 — 多设备惯导控制</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: ws: http:;">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div id="topbar">
+    <!-- '扫描端口' 按钮已移除 -->
+    <button id="btn-scan-ips">扫描IP</button>
+    <button id="btn-disconnect">断开连接</button>
+    <button id="btn-record">录制</button>
+    <button id="btn-zero">方向归零</button>
+    <button id="btn-accel">加计校准</button>
+    <button id="btn-inertial">惯导开始/结束</button>
+    <button id="btn-shutdown">关机</button>
+  </div>
+
+  <div id="content">
+    <div id="page-device-attitude" class="page active">
+      <div id="grid"></div>
+    </div>
+    <div id="page-device-track" class="page">
+      <div id="track-controls">
+        <button id="clear-tracks">清空轨迹</button>
+        <button id="replay-tracks">回放轨迹</button>
+      </div>
+      <canvas id="track-canvas"></canvas>
+      <div id="track-legend"></div>
+    </div>
+  </div>
+
+  <div id="bottombar">
+    <button data-page="attitude" class="page-switch active">设备姿态</button>
+    <button data-page="track" class="page-switch">设备轨迹</button>
+  </div>
+
+  <div id="modal" class="hidden"></div>
+
+  <div class="notification-container" id="notificationContainer"></div>
+
+  <!-- local three UMD (if you installed three via npm, replace this with /node_modules/three/build/three.min.js) -->
+  <script src="lib/three.min.js"></script>
+  <script src="lib/OBJLoader.js"></script>
+  <script src="renderer.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,261 @@
+我想做一个桌面应用程序，名字叫行迹。下面是要求：
+1. 要求项目化，分成多个文件，要求功能明确，架构清晰，便于维护， 要求UI美观，便于使用。
+2. 程序运行在windows系统上的桌面应用程序。
+3. 该程序是为了给一款惯性导航硬件设备提供批量的 同时控制多台这样的设备的用户图形化界面。该惯性导航硬件设备 通过wifi连接，在局域网内部连接。当我访问http://局域网ip地址/ws的时候，就可以连接到设备的websocket。并可以对设备进行控制和数据的接收。此外，通过websocket可以控制设备开启一个udp，向主机的指定端口发送有关数据。目前主机接收端口定在9001~9099的区间内。
+4. 程序界面分为顶部栏和中间展示的部分，和底栏。
+5. 顶部栏包含以下按钮：
+a.扫描端口：扫描主机端口9001~9100有多少UDP端口能接收到数据，0.3秒内能接收到数据则为在线。ps.数据向udp发送数据的频率为100Hz。
+当我点击这个按钮，需要有一个新的窗口，显示扫描进度，并根据进度，显示每台设备的在线情况，总共有100台设备。在线显示绿色，无数据显示红色。记录主机有多少个端口被占用了。
+b.扫描ip，根据当前网关，如果是255.255.255.0，那么就有255台设备，如果是255.255.254.0，就有两倍，以此类推，根据电脑当前的网关，扫描当前网关内有多少应用程序时在线的。和扫描端口一样，如果不在线，则在弹出的窗口内显示红色，如果能根据ip尝试连接到对应的Websocket地址，那么就显示橙色，否则显示黄色。（保持该websocket连接）。如果已经存在没有断开的websocket连接，那该ip就不需要再扫描一次，并重连，保持即可。
+在弹出的窗口中添加几个按钮：
+	1). 检测检测，向能连接websocket的设备发送读取网络连接设置指令getConnSettings，然后解析返回的设置，判断udp的ip地址是否是当前主机和udp端口是否在9001~9100区间内，如果满足，把该设备显示的颜色，修改为绿色。否则还是橙色。然后建立websocket的ip地址和udp端口的一一对应起来，匹配。如果有新的设备，记得更新下文中所属的界面分割等。
+	2). 更新配置，向刚刚依然是橙色的，发送主机ip地址，和在主机找一个9001~9100没有用过的udp端口， 发送更新设备的配置指令。
+c.断开指定连接（由用户控制，弹窗展示当前的连接，勾选并断开）
+d. 录制（结束录制），同一个按钮，按下录制，那就开始录制，也就是把接收到的数据存下来，图标变成红色闪烁。再按一下停止录制，然后保存数据到文件。保存数据的逻辑暂时无需实现，保留处理接口即可。
+e. 方向归零。按下按钮，则向所有连接websocket的设备，发送setZero。
+f. 加计校准。按下按钮，则向所有连接websocket的设备，发送accelCertificate。
+g. 惯导开始/结束。按下则切换图标。开始则向所有连接websocket的设备，发送drawpic。结束则向所有设备发送drawstop。
+h. 关机。按下按钮，则向所有连接websocket的设备，发送shutdown。
+
+6. 底部栏不是按钮，而是类似于切换页面的按钮，分别有以下页面：设备姿态，设备位置，点击可以切换页面
+7. 中间部分也就是显示内容的地方
+a. 对于设备姿态页面，你需要统计当前有多少设备和电脑成功连接了websocket，然后尝试将中间的空间分成这么多份，例如1：1x1，2：一行两列，3：2行2列，空一个，4：两行两列，5：2行三列空一格，等等以此类推。每一份中需要显示一个3d姿态。通过每一个设备websocket中接收到的姿态数据，分别渲染每个设备当前的姿态。
+b. 对于设备轨迹，你需要渲染一个二维直角坐标系，坐标轴上需要选择性标点，然后当这个点运动的时候，要显示其历史轨迹，同时也要有一个按钮，可以清空轨迹，鼠标可以拖拽和滚轮缩放，当绘制过程中，有点出现在了外面，需要自动适配画面大小。通过读取udp接收到的数据，根据udp接收到的数据，每一个udp对应一个颜色，该颜色可以修改，并且可以显示/隐藏切换。
+8. 端口扫描可以借用nmap等，如果需要 我会在软件目录下放一个nmapexe用于调用。
+9. 数据接收和解析可以参考以下内容：对于websocket的数据发送和解析：
+function connect() {
+        try {
+            ws = new WebSocket(WS_PATH);
+        } catch (e) {
+            console.warn('WebSocket 构造失败', e);
+            setConnState(false);
+            setTimeout(connect, RECONNECT_DELAY);
+            return;
+        }
+        ws.onopen = () => {
+            setConnState(true);
+            ws.send(JSON.stringify({cmd: 'getSettings'}));
+            ws.send(JSON.stringify({cmd: 'getPacketList'}));
+            ws.send(JSON.stringify({cmd: 'getConnSettings'}));
+            ws.send(JSON.stringify({cmd: 'getDeviceInfos'}));
+            console.log('ws open');
+        };
+        ws.onclose = () => {
+            setConnState(false);
+            console.log('ws close');
+            setTimeout(connect, RECONNECT_DELAY);
+        };
+        ws.onerror = (e) => {
+            console.warn('ws error', e);
+            setConnState(false);
+        };
+        ws.onmessage = (evt) => {
+            // 期望 JSON 格式，包含 ts, gyro, raw_accel, ... 等字段
+            try {
+                last_receive_time = Date.now();
+                const msg = JSON.parse(evt.data);
+                handleIMU(msg);
+            } catch (e) {
+                console.warn('无法解析消息', e);
+            }
+        };
+    }function handleIMU(msg) {
+        if (msg.ts === 0) // 设置信息
+        {
+            updateCustomSelect('tcp_mode', msg.tcp_mode);
+            updateCustomSelect('udp_mode', msg.udp_mode);
+            updateCustomSelect('usb_mode', msg.usb_mode);
+            updateCustomSelect('serial_mode', msg.serial_mode);
+            updateCustomSelect('bluetooth_mode', msg.bluetooth_mode);
+            updateCustomSelect('tcp_freq', msg.tcp_freq);
+            updateCustomSelect('udp_freq', msg.udp_freq);
+            updateCustomSelect('usb_freq', msg.usb_freq);
+            updateCustomSelect('serial_freq', msg.serial_freq);
+            updateCustomSelect('bluetooth_freq', msg.bluetooth_freq);
+            showNotification("设备信息读取成功", 'success');
+        } else if (msg.ts === 1) // 轨道信息
+        {
+            // 清空所有现有轨道
+            const lanes = document.querySelectorAll('.lane');
+            lanes.forEach(lane => {
+                lane.innerHTML = ''; // 清空轨道内容
+            });
+
+            // 处理接收到的数据包
+            if (msg.packets && Array.isArray(msg.packets)) {
+                msg.packets.forEach((packet, laneIndex) => {
+                    // 确保轨道索引在有效范围内
+                    if (laneIndex >= lanes.length) return;
+
+                    const lane = lanes[laneIndex];
+
+                    // 处理当前轨道的每个数据项
+                    packet.forEach(item => {
+                        const { code, sensor } = item;
+
+                        // 添加芯片到轨道
+                        addChipToLane(laneIndex, code, sensor);
+                    });
+                });
+
+                showNotification("轨道配置已更新", 'success');
+            }
+        }
+        else if (msg.ts === 2) // wifi设置信息
+        {
+            document.getElementById('wifi-uuid').value = msg.uuid || '';
+            document.getElementById('wifi-password').value = msg.pass || '';
+            document.getElementById('tcp_trans_port').value = msg.tcp_port || '';
+            document.getElementById('udp_host_ip').value = msg.udp_host_ip || '';
+            document.getElementById('udp_host_port').value = msg.udp_host_port || '';
+            document.getElementById('udp_slave_port').value = msg.udp_recv_port || '';
+            showNotification("WiFi和蓝牙配置已更新", 'success');
+        }
+        else if (msg.ts === 3) // 系统信息
+        {
+            document.getElementById('imu_mac').textContent = msg.deviceid || '— —';
+            document.getElementById('ip_addr').textContent = msg.ip_addr || '— —';
+            document.getElementById('wifi_mac').textContent = msg.wifi_mac || '— —';
+            showNotification("设备信息已更新", 'success');
+        }
+        else { /* 正常数据 */
+            lastTs = msg.ts;
+            lastUpdateEl.textContent = new Date(Date.now()).toLocaleString();
+
+            // 更新 battery
+            if (typeof msg.battery === 'number') {
+                batteryEl.textContent = msg.battery.toFixed(1) + ' %';
+            }
+            // 处理 Base64 编码的 IMU 数据
+            if (msg.data && typeof msg.data === 'string') {
+                try {
+                    // 解码 Base64 数据
+                    const binaryString = atob(msg.data);
+                    const bytes = new Uint8Array(binaryString.length);
+
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+
+                    // 使用 DataView 解析二进制数据
+                    const view = new DataView(bytes.buffer);
+                    let offset = 0;
+
+                    // 解析时间戳 (8字节)
+                    const timestamp = view.getBigUint64(offset, true); // 小端序
+                    offset += 8;
+
+                    // 解析传感器数据数组
+                    const parseSensorArray = (count, dimensions) => {
+                        const result = [];
+                        for (let s = 0; s < count; s++) {
+                            const sensorData = [];
+                            for (let d = 0; d < dimensions; d++) {
+                                sensorData.push(view.getFloat32(offset, true)); // 小端序
+                                offset += 4;
+                            }
+                            result.push(sensorData);
+                        }
+                        return result;
+                    };
+
+                    // 解析标量数组
+                    const parseScalarArray = (count) => {
+                        const result = [];
+                        for (let i = 0; i < count; i++) {
+                            result.push(view.getFloat32(offset, true));
+                            offset += 4;
+                        }
+                        return result;
+                    };
+
+                    // 解析布尔数组
+                    const parseBoolArray = (count) => {
+                        const result = [];
+                        for (let i = 0; i < count; i++) {
+                            result.push(view.getUint8(offset) !== 0);
+                            offset += 1;
+                        }
+                        return result;
+                    };
+
+                    // 解析所有 IMU 数据字段
+                    const imuData = {
+                        timestamp: Number(timestamp),
+                        raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
+                        raw_mag: parseSensorArray(BMI088_NUM + 1, 3),
+                        raw_temp: parseScalarArray(BMI088_NUM + 1),
+                        quat: parseSensorArray(BMI088_NUM + 1, 4),
+                        rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
+                        eular: parseSensorArray(BMI088_NUM + 1, 3),
+                        linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        raw_velocity: parseSensorArray(BMI088_NUM + 1, 3),
+                        fixed_velocity: parseSensorArray(BMI088_NUM + 1, 3),
+                        displacement: parseSensorArray(BMI088_NUM + 1, 3),
+                        stationary: parseBoolArray(BMI088_NUM + 1)
+                    };
+
+                    // 将解析后的数据合并到 msg 对象
+                    Object.assign(msg, imuData);
+                } catch (error) {
+                    console.error("Base64 解码失败:", error);
+                    showNotification("IMU 数据解析错误", 'error');
+                    return;
+                }
+            }
+
+            // 更新静止状态标志
+            if (Array.isArray(msg.stationary)) {
+                msg.stationary.forEach((value, index) => {
+                    const flagElement = flagElements[index];
+                    const newColor = value ? '#24FF00':'red';
+
+                    if (stationaryFlags[index] !== value) {
+                        createAnimation(flagElement, newColor);
+                        setTimeout(() => {
+                            flagElement.style.backgroundColor = newColor;
+                        }, 100);
+                    }
+                });
+                stationaryFlags = [...msg.stationary];
+            }
+
+            // 更新时间戳显示
+            document.getElementById('tsDisplay').textContent = lastTs;
+
+            // 更新数据表格
+            DATA_GROUPS.forEach(g => {
+                const tableWraps = groupsContainer.querySelectorAll('.group');
+                const index = DATA_GROUPS.findIndex(x => x.key === g.key);
+                const tbody = tableWraps[index].querySelector('tbody');
+                let rowHtml = '';
+
+                if (g.dims === 1) {
+                    rowHtml = `<td class="ts">${lastTs}</td>` +
+                        Array.from({length: BMI088_NUM + 1}).map((_, s) => {
+                            const v = (msg[g.key] && msg[g.key][s] !== undefined) ? msg[g.key][s] : null;
+                            return `<td class="num small">${(v === null) ? '--' : fmt(v, 3)}</td>`;
+                        }).join('');
+                } else {
+                    rowHtml = `<td class="ts">${lastTs}</td>` +
+                        Array.from({length: BMI088_NUM + 1}).map((_, s) => {
+                            const arr = (msg[g.key] && msg[g.key][s]) ? msg[g.key][s] : null;
+                            if (!arr) return `<td class="num">--</td>`;
+                            const joined = Array.from({length: g.dims}).map((__, k) => fmt(arr[k], 3)).join('<br>');
+                            return `<td class="num" title="${joined}">${joined}</td>`;
+                        }).join('');
+                }
+                tbody.innerHTML = `<tr>${rowHtml}</tr>`;
+            });
+
+            // 推入缓冲区用于绘图
+            pushToBuffers(msg);
+        }
+    }
+对于udp的位置信息，数据是这么发送的udp_log_send("D,%f,%f,%f", zupt_pos.sample_pos[i][0], zupt_pos.sample_pos[i][1], fake_sum); fake_sum是前两个float的和，暂时无需使用忽略掉就行。
+
+10. 你需要自行选择合适的代码框架，并构建优美的UI，和便于维护的代码。
+有一些提醒，对于3d的渲染，只需要渲染姿态就行，不需要移动起来的3d复杂渲染。3d文件会根据你的需要提供。生成一个完整的项目骨架，把所有完整的代码放到一个可下载的项目包（ZIP）里。

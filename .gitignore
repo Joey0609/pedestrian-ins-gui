@@ -1,0 +1,108 @@
+# Generic
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Visual Studio / .NET
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+build/
+Build/
+Builds/
+artifacts/
+TestResults/
+*.log
+
+# NuGet
+packages/
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+.nuget/
+
+# Rider / JetBrains
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# MSBuild / Visual Studio generated
+Generated\ Files/
+*.cache
+*_i.c
+*_p.c
+*.ilk
+*.meta
+*.obj
+*.pch
+*.pdb
+*.ipdb
+
+# User secrets / config / keys
+*.pfx
+*.key
+*.cer
+*.pem
+*.publishsettings
+.env
+.env.local
+secrets.json
+
+# Unity (if used)
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+UserSettings/
+MemoryCaptures/
+sysinfo.txt
+Assets/AssetStoreTools*
+
+# Xamarin / Android / iOS
+*.apk
+*.ap_
+*.aab
+*.ipa
+*.keystore
+*.jks
+bin/Debug/
+bin/Release/
+obj/Debug/
+obj/Release/
+
+# Logs, coverage
+*.log
+coverage/
+coverage.* 
+*.coverage
+*.coveragexml
+
+# IDE specific
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Other
+*.swp
+*.swo
+*.bak
+*.orig
+*.tmp
+node_modules/
+
+# Local machine specific
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
