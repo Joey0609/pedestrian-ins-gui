@@ -1,6 +1,9 @@
 // renderer.js
-const OBJLoaderLite = window.OBJLoaderLite;
-const THREE = window.THREE;
+
+import * as THREE from '../node_modules/three/build/three.module.js';
+import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
+import { OBJLoader } from '../node_modules/three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from '../node_modules/three/examples/jsm/loaders/MTLLoader.js';
 
 let PCBModelGlobal = null; // cached loaded model/group
 
@@ -12,46 +15,64 @@ async function loadPCBModelOnce() {
     console.log('Loading PCB model...');
     // compute a URL relative to the current index.html
     const modelUrl = new URL('../assets/models/PCBmodel.obj', window.location.href).href;
-    const resp = await fetch(modelUrl);
-    if (!resp.ok) throw new Error('fetch failed: ' + resp.status);
-    const txt = await resp.text();
+    const objAbsUrl = modelUrl;
+    const basePathAbs = objAbsUrl.substring(0, objAbsUrl.lastIndexOf('/') + 1);
+    const mtlFilename = modelUrl.substring(modelUrl.lastIndexOf('/') + 1).replace(/\.obj$/i, '.mtl');
 
-    // Prefer three.js OBJLoader if available
-    if (window.THREE && typeof THREE.OBJLoader === 'function') {
-      const loader = new THREE.OBJLoader();
-      const obj = loader.parse(txt);
+    const mtlLoader = new MTLLoader();
+    mtlLoader.setPath(basePathAbs);
+    mtlLoader.setResourcePath(basePathAbs);
 
-      // ensure meshes have materials and normals
+    try {
+      const materials = await new Promise((resolve, reject) => {
+        mtlLoader.load(mtlFilename, resolve, undefined, () => reject(new Error('MTL not found')));
+      });
+      materials.preload();
+      const objLoader = new OBJLoader();
+      objLoader.setMaterials(materials);
+      const obj = await new Promise((resolve, reject) => {
+        objLoader.load(modelUrl, resolve, undefined, reject);
+      });
+      // traverse to compute normals if missing
       obj.traverse((c) => {
-        if (c.isMesh) {
-          if (!c.material) c.material = new THREE.MeshStandardMaterial({ color: 0x8fb3ff });
-          if (c.geometry && !c.geometry.attributes.normal && typeof c.geometry.computeVertexNormals === 'function') {
-            c.geometry.computeVertexNormals();
-          }
+        if (c.isMesh && c.geometry && !c.geometry.attributes.normal && typeof c.geometry.computeVertexNormals === 'function') {
+          c.geometry.computeVertexNormals();
         }
       });
-
       PCBModelGlobal = obj;
       return PCBModelGlobal;
+    } catch (err) {
+      console.info('MTL load failed or not present, falling back to plain OBJ. tried=', basePathAbs + mtlFilename);
     }
 
-    // fallback to the lightweight loader if present
-    if (window.OBJLoaderLite && typeof OBJLoaderLite.buildMeshFromOBJText === 'function') {
-      const mesh = OBJLoaderLite.buildMeshFromOBJText(txt, 0x8fb3ff);
-      // wrap mesh into a group for consistent handling
-      const g = new THREE.Group();
-      if (mesh.isMesh) g.add(mesh);
-      else g.add(mesh);
-      PCBModelGlobal = g;
-      return PCBModelGlobal;
-    }
-
-    console.warn('No OBJ loader available (three.OBJLoader or OBJLoaderLite required).');
-    return null;
+    // fallback to plain OBJ
+    const objLoader = new OBJLoader();
+    const obj = await new Promise((resolve, reject) => {
+      objLoader.load(modelUrl, resolve, undefined, reject);
+    });
+    applyDefaultMaterial(obj);
+    PCBModelGlobal = obj;
+    return PCBModelGlobal;
   } catch (e) {
     console.warn('loadPCBModelOnce error:', e);
     return null;
   }
+}
+
+function applyDefaultMaterial(obj) {
+  obj.traverse((child) => {
+    if (child.isMesh) {
+      if (!child.material || (Array.isArray(child.material) && child.material.length === 0)) {
+        child.material = new THREE.MeshStandardMaterial({ color: 0x8fbcd4, metalness: 0.3, roughness: 0.4 });
+      } else {
+        // ensure material has color if applicable
+        if (child.material && child.material.color) child.material.color.set(0x8fbcd4);
+      }
+      if (child.geometry && !child.geometry.attributes.normal && typeof child.geometry.computeVertexNormals === 'function') {
+        child.geometry.computeVertexNormals();
+      }
+    }
+  });
 }
 
 
@@ -204,13 +225,16 @@ electronAPI.onMatchedStartedUDP((data) => {
 });
 
 // ---------------- connection / render grid ----------------
+let oldLength = 0;
 async function listConns() {
   const list = await electronAPI.listConnections();
-  const oldLength = connections.length;
   connections = list;
+  console.log('Listing connections, count=', oldLength, "->", connections.length);
   if (oldLength !== connections.length) {
+    oldLength = connections.length;
     layoutGrid(true);
   } else {
+    oldLength = connections.length;
     layoutGrid(false);
   }
 }
@@ -266,25 +290,30 @@ function updateModelFromConn(model, conn) {
 
 // create per-card three.js renderer, load model if any
 function createAttitudeRenderer(container, conn) {
-  const W = container.clientWidth || 320, H = 200;
+  const W = container.clientWidth || 320, H = container.clientHeight || 200;
   if (!THREE || !THREE.WebGLRenderer) {
     container.innerHTML = '<div style="padding:12px;color:#444">three.js 未加载，显示占位信息<br/>' + (conn ? JSON.stringify(conn.lastMsg || {}) : '无数据') + '</div>';
     return;
   }
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
-  if (camera.position && typeof camera.position.set === 'function') {
-    camera.position.set(0, 0, 4);
-  } else if (camera.position) {
-    camera.position.x = 0; camera.position.y = 0; camera.position.z = 4;
-  }
+  camera.position.set(0, 0, 4);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(W, H);
+  renderer.setSize(W, H,false);
+  renderer.domElement.style.display = 'block';
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
   container.innerHTML = '';
   container.appendChild(renderer.domElement);
 
-  const grid = THREE.GridHelper ? new THREE.GridHelper(2, 8) : new THREE.Object3D(); scene.add(grid);
+  
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.enablePan = false;
+  // const grid = THREE.GridHelper ? new THREE.GridHelper(2, 8) : new THREE.Object3D(); scene.add(grid);
   const axes = THREE.AxesHelper ? new THREE.AxesHelper(1.2) : new THREE.Object3D(); scene.add(axes);
 
   let model = null;
@@ -327,17 +356,6 @@ function createAttitudeRenderer(container, conn) {
         inst = loaded;
       }
 
-      // ensure all meshes have geometry normals and a material
-      inst.traverse((c) => {
-        if (c.isMesh) {
-          if (c.geometry && typeof c.geometry.computeVertexNormals === 'function' &&
-            (!c.geometry.attributes.normal || c.geometry.attributes.normal.count === 0)) {
-            c.geometry.computeVertexNormals();
-          }
-          if (!c.material) c.material = createSafeMaterial({ color: 0x8fb3ff });
-        }
-      });
-
       // auto-scale & center to fit view: compute bounding box and scale to target ~1 unit
       try {
         const box = new THREE.Box3().setFromObject(inst);
@@ -351,7 +369,8 @@ function createAttitudeRenderer(container, conn) {
         }
         const center = new THREE.Vector3(); box.getCenter(center);
         if (inst.position && typeof inst.position.set === 'function') {
-          inst.position.set(-center.x, -center.y, -center.z);
+          inst.position.set(0,0,0);
+          // inst.position.set(-center.x, -center.y, -center.z);
         } else {
           inst.position = { x: -center.x, y: -center.y, z: -center.z };
         }
@@ -370,17 +389,21 @@ function createAttitudeRenderer(container, conn) {
 
   function animate() {
     requestAnimationFrame(animate);
+    controls.update();
     updateModelFromConn(model, conn);
     renderer.render(scene, camera);
   }
   animate();
 
   new ResizeObserver(() => {
-    const w = container.clientWidth || 320, h = 200;
-    renderer.setSize(w, h); camera.aspect = w / h; if (typeof camera.updateProjectionMatrix === 'function') camera.updateProjectionMatrix();
+    const w = container.clientWidth || 320;
+    const h = container.clientHeight-20 || 500;
+    console.log("resize2", w, h);
+    renderer.setSize(w, h,false); 
+    camera.aspect = w / h; if (typeof camera.updateProjectionMatrix === 'function') camera.updateProjectionMatrix();
   }).observe(container);
 
-  return { renderer, scene, camera, model };
+  return { renderer, scene, camera, model, controls };
 }
 
 // ---------------- Modal helpers ----------------
@@ -460,13 +483,13 @@ function showModalScanIPs(ips, subnet) {
       tooltip.style.display = 'none';
     });
 
-    // allow clicking a non-green cell to mark for re-scan (turn black)
-    div.addEventListener('click', () => {
-      if (scanState.cells[i].color !== COLORS.green) {
-        scanState.cells[i].color = COLORS.black;
-        div.style.background = COLORS.black;
-      }
-    });
+    // // allow clicking a non-green cell to mark for re-scan (turn black)
+    // div.addEventListener('click', () => {
+    //   if (scanState.cells[i].color !== COLORS.green) {
+    //     scanState.cells[i].color = COLORS.black;
+    //     div.style.background = COLORS.black;
+    //   }
+    // });
 
     gridCont.appendChild(div);
     cell.elem = div;
