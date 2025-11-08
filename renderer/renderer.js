@@ -77,6 +77,7 @@ function applyDefaultMaterial(obj) {
 
 
 let recording = false;
+let ins_writing = false;
 let connections = [];
 let tracks = {};
 let trackColors = {};
@@ -157,6 +158,25 @@ document.getElementById('btn-record').addEventListener('click', () => {
   if (recording) startRecording(); else stopRecording();
 });
 
+document.getElementById('btn-zero').addEventListener('click', () => {
+  electronAPI.broadcastCmd({ cmd: 'setZero' });
+  showNotification('Send Zero Heading to All', 'success');
+});
+document.getElementById('btn-inertial').addEventListener('click', () => {
+  ins_writing = !ins_writing;
+
+  const btn = document.getElementById('btn-inertial');
+  btn.style.background = ins_writing ? '#00ff00' : '#2b6ef6';
+  btn.textContent = (ins_writing ? '惯导结束' : '惯导开始');
+  electronAPI.broadcastCmd({ cmd: (ins_writing ? 'drawpic' : 'drawstop') });
+  // showNotification((ins_writing ? 'Send Start Inertial to All' : 'Send Stop Inertial to All'), 'success');
+});
+document.getElementById('btn-shutdown').addEventListener('click', () => {
+  if (confirm('确定要关闭所有设备吗？')) {
+    electronAPI.broadcastCmd({ cmd: 'shutdown' });
+  }
+  
+});
 document.querySelectorAll('.page-switch').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.page-switch').forEach(b => b.classList.remove('active'));
@@ -296,8 +316,8 @@ function createAttitudeRenderer(container, conn) {
     return;
   }
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
-  camera.position.set(0, 0, 4);
+  const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
+  camera.position.set(0, -1.5, 1);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(W, H,false);

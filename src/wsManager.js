@@ -314,6 +314,7 @@ class WSManager extends EventEmitter {
     Object.keys(this.conns).forEach(ip => {
       const c = this.conns[ip];
       if (c && c.ws && c.ws.readyState === WebSocket.OPEN) {
+        console.log('broadcast to', ip, obj);
         try { c.ws.send(JSON.stringify(obj)); } catch (e) { }
       }
     });
