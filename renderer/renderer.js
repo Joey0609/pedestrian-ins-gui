@@ -274,8 +274,6 @@ function layoutGrid(forceRebuild = false) {
   }
 }
 function updateModelFromConn(model, conn) {
-  // console.log('updateModelFromConn called');
-  console.log('updateModelFromConn', conn.lastMsg.quat[4].toString());
   if (conn && conn.lastMsg && conn.lastMsg.quat) {
     try {
       let q = conn.lastMsg.quat[4];
@@ -380,6 +378,10 @@ function createAttitudeRenderer(container, conn) {
 
       scene.add(inst);
       model = inst;
+
+      const key = conn ? conn.ip : 'placeholder_' + i;
+      const entry = rendererMap.get(key);
+      entry.model = model;
     } else {
       // fallback box if load failed or no loader available
       const geom = THREE.BoxGeometry ? new THREE.BoxGeometry(0.8, 0.02, 0.8) : new THREE.BufferGeometry();
@@ -392,7 +394,6 @@ function createAttitudeRenderer(container, conn) {
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
-    updateModelFromConn(model, conn);
     renderer.render(scene, camera);
   }
   animate();
