@@ -125,6 +125,7 @@ document.getElementById('btn-scan-ips').addEventListener('click', async () => {
     showSubnetSelectModalWithMemory(subnets, async (selected) => {
       // get host IP for that subnet using ipconfig
       try {
+        scanState.completed = 0;
         hostIp = await electronAPI.getHostIPForSubnet({ base: selected.base, cidr: selected.cidr, ifname: selected.ifname });
       } catch (e) {
         hostIp = selected.addr; // fallback
@@ -213,7 +214,7 @@ electronAPI.onWSScanResult((data) => {
       if (cellElement) {
         cellElement.style.background = color;
       }
-      updateProgress((scanState.completed / scanState.ips.length) * 100);
+      updateProgress(((scanState.completed / scanState.ips.length) * 100)>100?100:((scanState.completed / scanState.ips.length) * 100));
       if (scanState.completed === scanState.ips.length) {
         updateProgress(100);
         addScanButtonsToModal();
@@ -545,6 +546,7 @@ function addScanButtonsToModal() {
   const btnRescan = document.createElement('button'); btnRescan.textContent = '重新扫描（跳过绿色）';
   btnRescan.addEventListener('click', async () => {
     // build ip list excluding green ones
+    scanState.completed = 0;
     const toRescan = scanState.ips.filter((ip, idx) => scanState.cells[idx].color !== COLORS.green);
     // set non-green to black visually first
     scanState.ips.forEach((ip, idx) => {

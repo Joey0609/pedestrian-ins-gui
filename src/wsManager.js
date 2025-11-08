@@ -218,7 +218,7 @@ class WSManager extends EventEmitter {
             ws.on('error', (e) => { console.warn('ws error', ip, e); });
             this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
             // ask for conn settings
-            try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); } catch (e) { }
+            try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); console.log('Sent', JSON.stringify({ cmd: 'getConnSettings' }), 'to', ip); } catch (e) { }
             // provisional emit: ws available
             this.emit('scan-result', { ip, status: 'ws' });
           } else {
@@ -266,7 +266,7 @@ class WSManager extends EventEmitter {
       const ws = new WebSocket('http://' + ip + '/ws');
       ws.on('open', () => {
         this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
-        try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); } catch (e) { }
+        try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); console.log('Sent', JSON.stringify({ cmd: 'getConnSettings' }), 'to', ip); } catch (e) { }
         resolve({ ok: true });
       });
       ws.on('message', (data) => {
@@ -315,7 +315,7 @@ class WSManager extends EventEmitter {
       const c = this.conns[ip];
       if (c && c.ws && c.ws.readyState === WebSocket.OPEN) {
         console.log('broadcast to', ip, obj);
-        try { c.ws.send(JSON.stringify(obj)); } catch (e) { }
+        try { c.ws.send(JSON.stringify(obj));console.log("Sent", JSON.stringify(obj), "to", ip) } catch (e) { }
       }
     });
   }
@@ -331,7 +331,7 @@ class WSManager extends EventEmitter {
       try {
         const c = this.conns[ip];
         if (c && c.ws && c.ws.readyState === WebSocket.OPEN) {
-          try { c.ws.send(JSON.stringify({ cmd: 'getConnSettings' })); } catch (e) { }
+          try { c.ws.send(JSON.stringify({ cmd: 'getConnSettings' }));console.log("Sent", JSON.stringify({ cmd: 'getConnSettings' }), "to", ip) } catch (e) { }
         }
       } catch (e) { }
     }
@@ -360,6 +360,7 @@ class WSManager extends EventEmitter {
     const result = [];
     for (const ip of ips) {
       const c = this.conns[ip];
+      console.log('Updating device', ip, 'to', hostIp, 'port', portMap[ip]);
       if (!c || !c.ws || c.ws.readyState !== WebSocket.OPEN) {
         result.push({ ip, ok: false, reason: 'not-open' }); continue;
       }
@@ -368,9 +369,10 @@ class WSManager extends EventEmitter {
       const payload = { cmd: 'setUDPSettings', settings: { udp_host_ip: hostIp, udp_host_port: String(port) } };
       try {
         c.ws.send(JSON.stringify(payload));
+        console.log('Sent', payload, 'to', ip);
         result.push({ ip, ok: true });
       }
-      catch (e) { result.push({ ip, ok: false, reason: String(e) }); }
+      catch (e) { result.push({ ip, ok: false, reason: String(e) });console.log('Error sending to', ip, e); }
     }
     return result;
   }
@@ -401,6 +403,7 @@ class WSManager extends EventEmitter {
         for (const a of addrs) {
           const p = a.addr.split('.');
           if (p[0] === baseParts[0] && p[1] === baseParts[1] && p[2] === baseParts[2]) {
+            console.log("Found matching address:", a.addr);
             return a.addr;
           }
         }

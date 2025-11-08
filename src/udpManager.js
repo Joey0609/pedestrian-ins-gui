@@ -36,6 +36,7 @@ class UDPManager extends EventEmitter {
     const sock = dgram.createSocket('udp4');
     sock.on('message', (msg, rinfo) => {
       const text = msg.toString();
+      console.log(`UDP msg on port ${port}:`, text);
       if (text.startsWith('D,')) {
         const parts = text.split(',');
         const x = parseFloat(parts[1]);
