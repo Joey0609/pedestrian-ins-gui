@@ -4,6 +4,8 @@ const THREE = window.THREE;
 
 let PCBModelGlobal = null; // cached loaded model/group
 
+let rendererMap = new Map();
+
 async function loadPCBModelOnce() {
   if (PCBModelGlobal) return PCBModelGlobal;
   try {
@@ -142,11 +144,9 @@ document.querySelectorAll('.page-switch').forEach(btn => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     if (page === 'attitude') document.getElementById('page-device-attitude').classList.add('active');
     else document.getElementById('page-device-track').classList.add('active');
-    layoutGrid();
+    layoutGrid(true);
   });
 });
-
-window.addEventListener('resize', layoutGrid);
 
 // ---------------- Electron event listeners ----------------
 electronAPI.onWSScanProgress((data) => {
@@ -185,15 +185,17 @@ electronAPI.onWSMessage((msg) => {
   // msg: { ip, msg }
   // find connection and attach lastMsg so UI grid updates
   const idx = connections.findIndex(c => c.ip === msg.ip);
+  let isNew = false;
   if (idx >= 0) {
     connections[idx].lastMsg = msg.msg;
   } else {
     // push if not present
     connections.push({ ip: msg.ip, lastMsg: msg.msg, connSettings: msg.connSettings || null });
+    isNew = true;
   }
   // if IMU normal data, push to connection and will be used for attitude rendering
   // update grid
-  layoutGrid();
+  layoutGrid(isNew);
 });
 
 // when main started UDP listening for a matched device
@@ -204,26 +206,61 @@ electronAPI.onMatchedStartedUDP((data) => {
 // ---------------- connection / render grid ----------------
 async function listConns() {
   const list = await electronAPI.listConnections();
+  const oldLength = connections.length;
   connections = list;
-  layoutGrid();
+  if (oldLength !== connections.length) {
+    layoutGrid(true);
+  } else {
+    layoutGrid(false);
+  }
 }
 
-function layoutGrid() {
+function layoutGrid(forceRebuild = false) {
   const grid = document.getElementById('grid');
+  if (!grid) return;
   const count = connections.length || 1;
   const rows = Math.ceil(Math.sqrt(count));
   const cols = Math.ceil(count / rows);
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-  grid.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const conn = connections[i];
-    const card = document.createElement('div'); card.className = 'card'; card.style.background = '#fff'; card.style.borderRadius = '8px'; card.style.padding = '8px'; card.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)'; card.style.height = '100%';
-    const title = document.createElement('div'); title.textContent = conn ? conn.ip : ('设备 ' + (i + 1)); title.style.fontWeight = '700';
-    card.appendChild(title);
-    const threeDiv = document.createElement('div'); threeDiv.style.flex = '1'; threeDiv.style.minHeight = '0'; card.appendChild(threeDiv);
-    grid.appendChild(card);
-    createAttitudeRenderer(threeDiv, conn);
+  if (forceRebuild) {
+    grid.innerHTML = '';
+    rendererMap.clear();
+    for (let i = 0; i < count; i++) {
+      const conn = connections[i];
+      const card = document.createElement('div'); card.className = 'card'; card.style.background = '#fff'; card.style.borderRadius = '8px'; card.style.padding = '8px'; card.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)'; card.style.height = '100%';
+      const title = document.createElement('div'); title.textContent = conn ? conn.ip : ('设备 ' + (i + 1)); title.style.fontWeight = '700';
+      card.appendChild(title);
+      const threeDiv = document.createElement('div'); threeDiv.style.flex = '1'; threeDiv.style.minHeight = '0'; card.appendChild(threeDiv);
+      grid.appendChild(card);
+      const entry = createAttitudeRenderer(threeDiv, conn);
+      if (conn) {
+        rendererMap.set(conn.ip, entry);
+      } else {
+        rendererMap.set('placeholder_' + i, entry);
+      }
+    }
+  } else {
+    connections.forEach((conn, i) => {
+      const key = conn ? conn.ip : 'placeholder_' + i;
+      const entry = rendererMap.get(key);
+      if (entry && entry.model) {
+        updateModelFromConn(entry.model, conn);
+      }
+    });
+  }
+}
+
+function updateModelFromConn(model, conn) {
+  if (conn && conn.lastMsg && conn.lastMsg.quat) {
+    try {
+      let q = conn.lastMsg.quat;
+      if (Array.isArray(q) && Array.isArray(q[0])) q = q[0];
+      const w = q[0], x = q[1], y = q[2], z = q[3];
+      const threeQ = new THREE.Quaternion(x, y, z, w);
+      if (model.quaternion && typeof model.quaternion.copy === 'function') model.quaternion.copy(threeQ);
+      else model.quaternion = threeQ;
+    } catch (e) { /* ignore parse errors */ }
   }
 }
 
@@ -331,22 +368,9 @@ function createAttitudeRenderer(container, conn) {
     }
   })();
 
-  function updateFromConn() {
-    if (conn && conn.lastMsg && conn.lastMsg.quat) {
-      try {
-        let q = conn.lastMsg.quat;
-        if (Array.isArray(q) && Array.isArray(q[0])) q = q[0];
-        const w = q[0], x = q[1], y = q[2], z = q[3];
-        const threeQ = new THREE.Quaternion(x, y, z, w);
-        if (model.quaternion && typeof model.quaternion.copy === 'function') model.quaternion.copy(threeQ);
-        else model.quaternion = threeQ;
-      } catch (e) { /* ignore parse errors */ }
-    }
-  }
-
   function animate() {
     requestAnimationFrame(animate);
-    updateFromConn();
+    updateModelFromConn(model, conn);
     renderer.render(scene, camera);
   }
   animate();
@@ -355,11 +379,9 @@ function createAttitudeRenderer(container, conn) {
     const w = container.clientWidth || 320, h = 200;
     renderer.setSize(w, h); camera.aspect = w / h; if (typeof camera.updateProjectionMatrix === 'function') camera.updateProjectionMatrix();
   }).observe(container);
-}
 
-// render loop poll
-function renderLoop() { listConns(); requestAnimationFrame(renderLoop); }
-renderLoop();
+  return { renderer, scene, camera, model };
+}
 
 // ---------------- Modal helpers ----------------
 function showModal(contentHtml) {
@@ -679,3 +701,5 @@ function stopRecording() { console.log('record stopped. samples:', (window._reco
 
 // kept for compatibility fallback
 function guessHostIP() { return hostIp || '192.168.1.100'; }
+
+setInterval(listConns, 1000);

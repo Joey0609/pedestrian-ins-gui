@@ -42,7 +42,6 @@ Generated\ Files/
 *_p.c
 *.ilk
 *.meta
-*.obj
 *.pch
 *.pdb
 *.ipdb

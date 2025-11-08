@@ -44,8 +44,13 @@
   <div class="notification-container" id="notificationContainer"></div>
 
   <!-- local three UMD (if you installed three via npm, replace this with /node_modules/three/build/three.min.js) -->
-  <script src="lib/three.min.js"></script>
-  <script src="lib/OBJLoader.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./node_modules/three/build/three.module.js"
+      }
+    }
+  </script>
   <script src="renderer.js"></script>
 </body>
 
