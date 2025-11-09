@@ -91,7 +91,6 @@ class WSManager extends EventEmitter {
               try {
                 const msg = JSON.parse(data.toString());
                 // emit ws message
-                if (msg.ts <= 10) console.log(msg.ts)
                 // connSettings handling
                 if (msg.ts <= 3){ }  // 设置信息，轨道信息，wifi设置信息，系统信息
                 else if (msg.ts === 4) { 
@@ -114,7 +113,6 @@ class WSManager extends EventEmitter {
                           position.push(view.getFloat32(offset, true)); // Little-endian
                           offset += 4;
                         }
-                        console.log(position);
                         positions.push(position);
                       }
                       msg.positions = positions;

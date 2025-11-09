@@ -235,6 +235,7 @@ electronAPI.onWSMessage((msg) => {
   // if IMU normal data, push to connection and will be used for attitude rendering
   // update grid
   layoutGrid(isNew);
+  let ip = msg.ip;
   msg = msg.msg;
   if (msg.positions) {
     if (!tracks[ip]) {
@@ -628,6 +629,7 @@ function showSubnetSelectModalWithMemory(subnets, callback) {
 
 // ----------------- scan helpers -----------------
 function buildScanRangeFromSubnet(sn) {
+  console.log('buildScanRangeFromSubnet', sn);
   if (!sn || !sn.base || !sn.cidr) return [];
   const parts = sn.base.split('.').map(Number);
   const hostBits = 32 - sn.cidr;
@@ -673,6 +675,7 @@ function getUniqueRandomColor(ip) {
     color = `rgb(${r},${g},${b})`;
   } while (usedColors.has(color));
   usedColors.add(color);
+  console.log('Assigned color for', ip, ':', color);
   return color;
 }
 
@@ -727,7 +730,6 @@ function getUniqueRandomColor(ip) {
   }
   function drawTracks() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     // Draw axes
     ctx.strokeStyle = '#ddd';
     ctx.lineWidth = 1;
@@ -886,8 +888,5 @@ function fitToWindow() {
 // helpers
 function startRecording() { window._recordBuf = []; }
 function stopRecording() { console.log('record stopped. samples:', (window._recordBuf || []).length); }
-
-// kept for compatibility fallback
-function guessHostIP() { return hostIp || '192.168.1.100'; }
 
 setInterval(listConns, 1000);
