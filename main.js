@@ -1,11 +1,9 @@
 // main.js
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
-const { UDPManager } = require('./src/udpManager');
 const { WSManager } = require('./src/wsManager');
 
 let mainWin;
-let udpMgr;
 let wsMgr;
 function createWindow() {
   mainWin = new BrowserWindow({
@@ -19,16 +17,12 @@ function createWindow() {
   });
 
   mainWin.loadFile('renderer/index.html');
-  // mainWin.webContents.openDevTools();
+  Menu.setApplicationMenu(null);
+  mainWin.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
-  udpMgr = new UDPManager();
   wsMgr = new WSManager();
-
-  udpMgr.on('position', (data) => {
-    if (mainWin && mainWin.webContents) mainWin.webContents.send('udp-position', data);
-  });
 
   wsMgr.on('scan-progress', (data) => {
     if (mainWin && mainWin.webContents) mainWin.webContents.send('ws-scan-progress', data);
@@ -42,18 +36,6 @@ app.whenReady().then(() => {
     if (mainWin && mainWin.webContents) mainWin.webContents.send('ws-message', data);
   });
 
-  // when a device has matched (udp settings pointing to our host and in-range port), start UDP listen
-  wsMgr.on('matched', (data) => {
-    // data = { ip, port }
-    if (data && data.port) {
-      try {
-        udpMgr.startListening(Number(data.port));
-        if (mainWin && mainWin.webContents) mainWin.webContents.send('matched-started-udp', data);
-      } catch (e) {
-        console.warn('failed to start udp listen for matched device', e);
-      }
-    }
-  });
 
   // IPCs
   ipcMain.handle('getSubnets', async () => {
@@ -70,12 +52,6 @@ app.whenReady().then(() => {
 
   ipcMain.handle('disconnect-ws', async (event, args) => {
     return await wsMgr.disconnect(args.ip);
-  });
-
-  ipcMain.handle('detect-and-match', async (event, args) => {
-    const hostIp = args.hostIp;
-    const portRange = args.portRange || { start: 9001, end: 9100 };
-    return await wsMgr.detectAndMatch(hostIp, portRange);
   });
 
   ipcMain.handle('update-config', async (event, args) => {

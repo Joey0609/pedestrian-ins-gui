@@ -5,6 +5,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto
 button{padding:8px 12px; border-radius:8px; border: none; background:#2b6ef6;color:white; cursor:pointer;}
 button.secondary{background:#6b7280;}
 .page{display:none; height:100%;}
+.page_track {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto 1fr;
+    
+}
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
 .page.active{display:block;}
 #grid{display:grid; gap:10px; height:100%; width:100%;}
 .card { display:flex; flex-direction:column; justify-content:space-between; }
@@ -26,3 +36,17 @@ select { padding: 6px; border-radius: 4px; border: 1px solid #ddd; }
 .notification.error {background-color: #ffebee;color: #d32f2f;}
 .notification.success {background-color: #e8f5e9;color: #388e3c;}
 .notification.show {margin-top: 10px;}
+
+
+
+
+.panel {
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    border-radius:12px;
+    padding:16px;
+    box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+    overflow:auto;
+  }
+  .panel h2{margin:0 0 12px 0;color:var(--accent);font-weight:600}
+  .controls {display:flex;flex-direction:column;gap:10px;}
+  .row {display:flex;gap:8px;align-items:center;}

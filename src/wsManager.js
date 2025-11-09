@@ -5,6 +5,7 @@ const child_process = require('child_process');
 const EventEmitter = require('events');
 const { networkInterfaces } = os;
 const iconv = require('iconv-lite');
+const { Console } = require('console');
 const BMI088_NUM = 4; // Number of BMI088 IMUs connected
 
 function cidrToRange(base, cidr) {
@@ -83,48 +84,49 @@ class WSManager extends EventEmitter {
           if (this._cancelScan) break;
           results[ip] = probeRes.status;
           if (probeRes.status === 'connectable') {
-            // We have an open ws; register handlers and attempt to read connSettings
+            this.emit('scan-result', { ip, status: 'green' });
             const ws = probeRes.ws;
             // install events
             ws.on('message', (data) => {
               try {
                 const msg = JSON.parse(data.toString());
                 // emit ws message
-                
+                if (msg.ts <= 10) console.log(msg.ts)
                 // connSettings handling
-                if (msg.ts === 0){ }  // 设置信息
-                else if (msg.ts === 1) { }// 轨道信息
-                
-                else if (msg.ts === 2) // wifi设置信息
-                {
-                  const cs = {
-                    udp_host_ip: msg.udp_host_ip || msg.udp_host || null,
-                    udp_host_port: msg.udp_host_port || msg.udp_host_port || msg.udp_slave_port || null
-                  };
-                  if (!this.conns[ip]) this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
-                  this.conns[ip].connSettings = cs;
-                  // this.conns[ip].lastMsg = msg;
-                  // evaluate
-                  // determine local addresses
-                  const localAddrs = Object.values(networkInterfaces()).flat().filter(Boolean).map(i => i.address);
-                  if (cs.udp_host_ip && localAddrs.includes(cs.udp_host_ip)) {
-                    const p = parseInt(cs.udp_host_port, 10);
-                    if (!isNaN(p) && p >= 9001 && p <= 9100) {
-                      this.emit('scan-result', { ip, status: 'green' });
-                      this.emit('matched', { ip, port: p }); // notify main to start UDP listen
-                      return;
-                    } else {
-                      this.emit('scan-result', { ip, status: 'ws' }); // ws but udp port out of range
+                if (msg.ts <= 3){ }  // 设置信息，轨道信息，wifi设置信息，系统信息
+                else if (msg.ts === 4) { 
+                  console.log("Received message from", ip, ":", msg);
+                  if (msg.data && typeof msg.data === 'string') {
+                    try {
+                      // 解码 Base64 数据
+                      const binaryString = atob(msg.data);
+                      const bytes = new Uint8Array(binaryString.length);
+                      for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                      }
+                      const view = new DataView(bytes.buffer);
+                      let offset = 0;
+                      // Parse the float[10][3] array
+                      const positions = [];
+                      for (let i = 0; i < 10; i++) {
+                        const position = [];
+                        for (let j = 0; j < 3; j++) {
+                          position.push(view.getFloat32(offset, true)); // Little-endian
+                          offset += 4;
+                        }
+                        console.log(position);
+                        positions.push(position);
+                      }
+                      msg.positions = positions;
+                    } catch (error) {
+                      console.error("Base64 解码失败:", error);
+                      showNotification("INS 数据解析错误", 'error');
                       return;
                     }
-                  } else {
-                    this.emit('scan-result', { ip, status: 'ws' }); // ws but not pointing to this host
-                    return;
+
                   }
-                }
-                else if (msg.ts === 3) { }// 系统信息
-                
-                else { /* 正常数据 */
+
+                } else { /* 正常数据 */
                   if (msg.data && typeof msg.data === 'string') {
                     try {
                       // 解码 Base64 数据
@@ -217,10 +219,6 @@ class WSManager extends EventEmitter {
             ws.on('close', () => { if (this.conns[ip]) this.conns[ip].state = 'closed'; });
             ws.on('error', (e) => { console.warn('ws error', ip, e); });
             this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
-            // ask for conn settings
-            try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); console.log('Sent', JSON.stringify({ cmd: 'getConnSettings' }), 'to', ip); } catch (e) { }
-            // provisional emit: ws available
-            this.emit('scan-result', { ip, status: 'ws' });
           } else {
             // timeout/no-ws
             this.emit('scan-result', { ip, status: 'ping' });
@@ -322,38 +320,6 @@ class WSManager extends EventEmitter {
 
   listConnections() {
     return Object.keys(this.conns).map(ip => ({ ip, state: this.conns[ip].state, lastMsg: this.conns[ip].lastMsg, connSettings: this.conns[ip].connSettings }));
-  }
-
-  async detectAndMatch(hostIp, portRange = { start: 9001, end: 9100 }) {
-    const res = [];
-    const ips = Object.keys(this.conns);
-    for (const ip of ips) {
-      try {
-        const c = this.conns[ip];
-        if (c && c.ws && c.ws.readyState === WebSocket.OPEN) {
-          try { c.ws.send(JSON.stringify({ cmd: 'getConnSettings' }));console.log("Sent", JSON.stringify({ cmd: 'getConnSettings' }), "to", ip) } catch (e) { }
-        }
-      } catch (e) { }
-    }
-    await new Promise(r => setTimeout(r, 400));
-    for (const ip of ips) {
-      const c = this.conns[ip];
-      const cs = c && c.connSettings;
-      let status = 'unknown';
-      if (cs && cs.udp_host_ip && cs.udp_host_ip === hostIp) {
-        const p = parseInt(cs.udp_host_port);
-        if (!isNaN(p) && p >= portRange.start && p <= portRange.end) status = 'matched';
-        else status = 'udp-port-out-of-range';
-      } else if (cs) status = 'udp-to-other-host';
-      else status = 'no-conn-settings';
-      res.push({ ip, status, connSettings: cs || null });
-    }
-    // emit results too
-    res.forEach(r => {
-      if (r.status === 'matched') this.emit('scan-result', { ip: r.ip, status: 'green' });
-      else this.emit('scan-result', { ip: r.ip, status: 'ws' });
-    });
-    return res;
   }
 
   async updateDevicesConfig(ips, hostIp, portMap) {

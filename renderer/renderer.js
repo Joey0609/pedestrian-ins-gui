@@ -93,9 +93,8 @@ let scanAbortRequested = false;
 const COLORS = {
   offline: 'red',
   ping: '#FFC107',       // ping ok (橙黄色)
-  ws: '#d7f69a',         // websocket connectable (黄绿色)
   green: '#00FF00',
-  black: '#222222'
+  black: '#444444'
 };
 
 // ---------------- Notification helper ----------------
@@ -164,17 +163,14 @@ document.getElementById('btn-zero').addEventListener('click', () => {
   showNotification('Send Zero Heading to All', 'success');
 });
 document.getElementById('btn-inertial').addEventListener('click', () => {
-  ins_writing = !ins_writing;
-
   const btn = document.getElementById('btn-inertial');
-  btn.style.background = ins_writing ? '#00ff00' : '#2b6ef6';
-  btn.textContent = (ins_writing ? '惯导结束' : '惯导开始');
-  electronAPI.broadcastCmd({ cmd: (ins_writing ? 'drawpic' : 'drawstop') });
-  // showNotification((ins_writing ? 'Send Start Inertial to All' : 'Send Stop Inertial to All'), 'success');
+  electronAPI.broadcastCmd({ cmd: 'drawpic'});
+  showNotification('Send Inertial Reset to All', 'success');
 });
 document.getElementById('btn-shutdown').addEventListener('click', () => {
   if (confirm('确定要关闭所有设备吗？')) {
     electronAPI.broadcastCmd({ cmd: 'shutdown' });
+    showNotification('Send Shutdown Command to All', 'success');
   }
   
 });
@@ -239,11 +235,6 @@ electronAPI.onWSMessage((msg) => {
   // if IMU normal data, push to connection and will be used for attitude rendering
   // update grid
   layoutGrid(isNew);
-});
-
-// when main started UDP listening for a matched device
-electronAPI.onMatchedStartedUDP((data) => {
-  showNotification(`已为 ${data.ip} 启动 UDP 监听 (port ${data.port})`, 'success');
 });
 
 // ---------------- connection / render grid ----------------
@@ -568,40 +559,8 @@ function addScanButtonsToModal() {
     }
   });
 
-  const btnUpdate = document.createElement('button'); btnUpdate.textContent = '更新配置';
-  btnUpdate.addEventListener('click', async () => {
-    // keep modal open and run existing update config logic
-    if (!hostIp) {
-      showNotification('未检测到主机 IP，尝试重新获取', 'warning');
-      // try to guess host ip from first subnet in scanState - but we preserved hostIp earlier normally
-    }
-    showNotification('正在更新设备配置...', 'info');
-    try {
-      const conns = await electronAPI.listConnections();
-      const ipsToUpdate = conns.filter(c => c.connSettings && (c.connSettings.udp_host_ip !== hostIp || !(parseInt(c.connSettings.udp_host_port) >= 9001 && parseInt(c.connSettings.udp_host_port) <= 9100))).map(c => c.ip);
-      const used = new Set(conns.filter(c => c.connSettings && c.connSettings.udp_host_port).map(c => c.connSettings.udp_host_port));
-      const portMap = {};
-      let nextPort = 9001;
-      for (const ip of ipsToUpdate) {
-        while (used.has(String(nextPort)) || nextPort > 9100) nextPort++;
-        if (nextPort > 9100) break;
-        portMap[ip] = nextPort;
-        used.add(String(nextPort));
-        nextPort++;
-      }
-      const res = await electronAPI.updateConfig({ ips: ipsToUpdate, hostIp, portMap });
-      showNotification('更新完成', 'success');
-      // After update, call detectAndMatch to refresh colors
-      const det = await electronAPI.detectAndMatch({ hostIp, portRange: { start: 9001, end: 9100 } });
-      // detect results are emitted via ws-scan-result events; also update UI by listing conns
-      listConns();
-    } catch (e) {
-      console.error('updateConfig failed', e);
-      showNotification('更新配置失败: ' + (e && e.message), 'error');
-    }
-  });
 
-  btnsWrap.appendChild(btnRescan); btnsWrap.appendChild(btnUpdate);
+  btnsWrap.appendChild(btnRescan);
   modalContent.appendChild(btnsWrap);
 }
 
@@ -669,16 +628,16 @@ function buildScanRangeFromSubnet(sn) {
 }
 
 // ---------------- UDP position & tracks ----------------
-electronAPI.onUDPPosition((data) => {
-  console.log('UDP position data', data);
-  const port = data.port;
-  if (!tracks[port]) tracks[port] = [];
-  tracks[port].push({ x: data.x, y: data.y, t: Date.now() });
-  if (!trackColors[port]) trackColors[port] = randomColorForPort(port);
-  trackVisible[port] = true;
-  if (typeof window.drawTracks === 'function') window.drawTracks();
-  updateLegend();
-});
+// electronAPI.onUDPPosition((data) => {
+//   console.log('UDP position data', data);
+//   const port = data.port;
+//   if (!tracks[port]) tracks[port] = [];
+//   tracks[port].push({ x: data.x, y: data.y, t: Date.now() });
+//   if (!trackColors[port]) trackColors[port] = randomColorForPort(port);
+//   trackVisible[port] = true;
+//   if (typeof window.drawTracks === 'function') window.drawTracks();
+//   updateLegend();
+// });
 
 // also respond to ws-message event to immediately update attitude if IMU comes over ws (handled in listConns update)
 
