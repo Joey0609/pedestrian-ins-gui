@@ -164,7 +164,7 @@ document.getElementById('btn-zero').addEventListener('click', () => {
 });
 document.getElementById('btn-inertial').addEventListener('click', () => {
   const btn = document.getElementById('btn-inertial');
-  electronAPI.broadcastCmd({ cmd: 'drawpic'});
+  electronAPI.broadcastCmd({ cmd: 'drawpic' });
   showNotification('Send Inertial Reset to All', 'success');
 });
 document.getElementById('btn-shutdown').addEventListener('click', () => {
@@ -172,7 +172,7 @@ document.getElementById('btn-shutdown').addEventListener('click', () => {
     electronAPI.broadcastCmd({ cmd: 'shutdown' });
     showNotification('Send Shutdown Command to All', 'success');
   }
-  
+
 });
 document.querySelectorAll('.page-switch').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -235,6 +235,20 @@ electronAPI.onWSMessage((msg) => {
   // if IMU normal data, push to connection and will be used for attitude rendering
   // update grid
   layoutGrid(isNew);
+  msg = msg.msg;
+  if (msg.positions) {
+    if (!tracks[ip]) {
+      tracks[ip] = [];
+      trackColors[ip] = getUniqueRandomColor(ip);
+      trackVisible[ip] = true;
+      updateLegend();
+    }
+    msg.positions.forEach(pos => {
+      tracks[ip].push({ x: pos[0], y: pos[1], t: Date.now() }); // ignore z, use current time
+    });
+    if (typeof window.drawTracks === 'function') window.drawTracks();
+    updateLegend(); // update position
+  }
 });
 
 // ---------------- connection / render grid ----------------
@@ -292,7 +306,7 @@ function updateModelFromConn(model, conn) {
       let q = conn.lastMsg.quat[4];
       if (Array.isArray(q) && Array.isArray(q[0])) q = q[0];
       const w = q[0], x = q[1], y = q[2], z = q[3];
-      const threeQ = new THREE.Quaternion(x, y, z, w);
+      const threeQ = new THREE.Quaternion(-y, x, z, w);
       if (model.quaternion && typeof model.quaternion.copy === 'function') 
         model.quaternion.copy(threeQ);
       else 
@@ -648,6 +662,20 @@ function randomColorForPort(port) {
   return `rgb(${r},${g},${b})`;
 }
 
+let usedColors = new Set();
+function getUniqueRandomColor(ip) {
+  let color;
+  do {
+    const seed = ip.split('.').reduce((acc, part) => acc + parseInt(part), 0);
+    const r = (seed * 97) % 255;
+    const g = (seed * 57) % 255;
+    const b = (seed * 31) % 255;
+    color = `rgb(${r},${g},${b})`;
+  } while (usedColors.has(color));
+  usedColors.add(color);
+  return color;
+}
+
 // track canvas setup unchanged, except exposure of drawTracks
 (function setupTrackCanvas() {
   const canvas = document.getElementById('track-canvas');
@@ -655,26 +683,116 @@ function randomColorForPort(port) {
   const ctx = canvas.getContext('2d');
   function fit() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; drawTracks(); }
   window.addEventListener('resize', fit);
-  let offsetX = canvas.width / 2, offsetY = canvas.height / 2, scale = 20;
+  let offsetX = 0, offsetY = 0, scale = 50;
   let dragging = false, last = [0, 0];
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); const z = Math.exp(-e.deltaY * 0.001); scale *= z; drawTracks(); });
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left - canvas.clientWidth / 2;
+    const mouseY = e.clientY - rect.top - canvas.clientHeight / 2;
+    const worldXBefore = (mouseX - offsetX) / scale;
+    const worldYBefore = -(mouseY - offsetY) / scale; // y inverted
+    const factor = Math.exp(-e.deltaY * 0.0008);
+    let newScale = Math.max(0.1, Math.min(800, scale * factor));
+    scale = newScale;
+    offsetX = mouseX - worldXBefore * scale;
+    offsetY = mouseY + worldYBefore * scale;
+    drawTracks();
+  });
   canvas.addEventListener('mousedown', (e) => { dragging = true; last = [e.clientX, e.clientY]; });
   window.addEventListener('mouseup', () => dragging = false);
-  window.addEventListener('mousemove', (e) => { if (!dragging) return; offsetX += (e.clientX - last[0]); offsetY += (e.clientY - last[1]); last = [e.clientX, e.clientY]; drawTracks(); });
+  window.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    if (!dragging) return; offsetX += (e.clientX - last[0]); 
+    offsetY += (e.clientY - last[1]); last = [e.clientX, e.clientY]; 
+    drawTracks();
+  });
 
-  document.getElementById('clear-tracks').addEventListener('click', () => { tracks = {}; updateLegend(); drawTracks(); });
+  document.getElementById('clear-tracks').addEventListener('click', () => { tracks = {}; usedColors.clear(); updateLegend(); drawTracks(); });
   document.getElementById('replay-tracks').addEventListener('click', () => { replayTracks(); });
-
+  document.getElementById('fit-window').addEventListener('click', () => { fitToWindow(); });
+  function niceStep(pxPerUnit, targetPx = 80) {
+    const raw = targetPx / Math.max(1e-9, pxPerUnit);
+    const pow10 = Math.pow(10, Math.floor(Math.log10(raw)));
+    const cand = [1, 2, 5].map(m => m * pow10);
+    let best = cand[0];
+    let bestDiff = Math.abs(cand[0] - raw);
+    for (let i = 1; i < cand.length; i++) {
+      const diff = Math.abs(cand[i] - raw);
+      if (diff < bestDiff) { best = cand[i]; bestDiff = diff; }
+    }
+    return best;
+  }
   function drawTracks() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#ddd'; ctx.beginPath(); ctx.moveTo(0, offsetY); ctx.lineTo(canvas.width, offsetY); ctx.moveTo(offsetX, 0); ctx.lineTo(offsetX, canvas.height); ctx.stroke();
-    Object.keys(tracks).forEach(port => {
-      if (!trackVisible[port]) return;
-      const pts = tracks[port];
-      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[port] || 'black';
-      for (let i = 0; i < pts.length; i++) { const px = offsetX + pts[i].x * scale; const py = offsetY - pts[i].y * scale; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+
+    // Draw axes
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // Horizontal axis
+    ctx.moveTo(0, canvas.height / 2 + offsetY);
+    ctx.lineTo(canvas.width, canvas.height / 2 + offsetY);
+    // Vertical axis
+    ctx.moveTo(canvas.width / 2 + offsetX, 0);
+    ctx.lineTo(canvas.width / 2 + offsetX, canvas.height);
+    ctx.stroke();
+
+    // Draw ticks and labels
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#666';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Determine tick interval based on scale
+    let tickInterval = niceStep(scale);
+    
+    // X axis ticks
+    const centerX = canvas.width / 2 + offsetX;
+    const centerY = canvas.height / 2 + offsetY;
+    const minX = -(canvas.width / 2  + offsetX) / scale;
+    const maxX = (canvas.width / 2 - offsetX) / scale;
+    
+    for (let x = Math.ceil(minX / tickInterval) * tickInterval; x <= maxX; x += tickInterval) {
+      const px = centerX + x * scale;
+      ctx.beginPath();
+      ctx.moveTo(px, centerY - 5);
+      ctx.lineTo(px, centerY + 5);
       ctx.stroke();
-      const lastp = pts[pts.length - 1]; if (lastp) { ctx.fillStyle = trackColors[port] || 'black'; ctx.beginPath(); ctx.arc(offsetX + lastp.x * scale, offsetY - lastp.y * scale, 4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillText(x.toFixed(1), px, centerY + 15);
+    }
+
+    // Y axis ticks (inverted)
+    const minY = (offsetY - canvas.height / 2) / scale;
+    const maxY = (offsetY  + canvas.height / 2) / scale;
+    for (let y = Math.ceil(minY / tickInterval) * tickInterval; y <= maxY; y += tickInterval) {
+      const py = centerY - y * scale; // inverted
+      ctx.beginPath();
+      ctx.moveTo(centerX - 5, py);
+      ctx.lineTo(centerX + 5, py);
+      ctx.stroke();
+      ctx.fillText(y.toFixed(1), centerX - 15, py);
+    }
+
+    // Draw tracks
+    Object.keys(tracks).forEach(ip => {
+      if (!trackVisible[ip]) return;
+      const pts = tracks[ip];
+      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[ip] || 'black';
+      for (let i = 0; i < pts.length; i++) {
+        const px = centerX + pts[i].x * scale;
+        const py = centerY - pts[i].y * scale; // inverted y
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      const lastp = pts[pts.length - 1]; if (lastp) {
+        ctx.fillStyle = trackColors[ip] || 'black';
+        ctx.beginPath();
+        ctx.arc(centerX + lastp.x * scale, centerY - lastp.y * scale, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
   }
   window.drawTracks = drawTracks;
@@ -684,14 +802,30 @@ function randomColorForPort(port) {
 
 function updateLegend() {
   const container = document.getElementById('track-legend'); if (!container) return; container.innerHTML = '';
-  Object.keys(tracks).forEach(port => {
-    const item = document.createElement('div'); item.className = 'legend-item';
-    const colorBox = document.createElement('div'); colorBox.style.width = '14px'; colorBox.style.height = '14px'; colorBox.style.background = trackColors[port]; colorBox.style.borderRadius = '3px';
-    const label = document.createElement('div'); label.textContent = 'port ' + port;
-    const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.checked = trackVisible[port] !== false;
-    toggle.addEventListener('change', () => { trackVisible[port] = toggle.checked; if (typeof window.drawTracks === 'function') window.drawTracks(); });
-    item.appendChild(colorBox); item.appendChild(label); item.appendChild(toggle); container.appendChild(item);
+  Object.keys(tracks).forEach(ip => {
+    const item = document.createElement('div'); item.className = 'track-item';
+    const header = document.createElement('div'); header.className = 'track-item-header';
+    const ipLabel = document.createElement('span'); ipLabel.className = 'track-item-ip'; ipLabel.textContent = ip;
+    const lastPos = tracks[ip][tracks[ip].length - 1];
+    const posLabel = document.createElement('span'); posLabel.className = 'track-item-pos'; posLabel.textContent = lastPos ? `(${lastPos.x.toFixed(2)}, ${lastPos.y.toFixed(2)})` : '(No pos)';
+    const colorBox = document.createElement('div'); colorBox.className = 'track-item-color'; colorBox.style.background = trackColors[ip];
+    const colorInput = document.createElement('input'); colorInput.type = 'color'; colorInput.value = rgbToHex(trackColors[ip]); colorInput.style.display = 'none';
+    colorBox.addEventListener('click', () => colorInput.click());
+    colorInput.addEventListener('input', (e) => { trackColors[ip] = e.target.value; colorBox.style.background = e.target.value; drawTracks(); });
+    const toggle = document.createElement('input'); toggle.className = 'track-item-visible'; toggle.type = 'checkbox'; toggle.checked = trackVisible[ip] !== false;
+    toggle.addEventListener('change', () => { trackVisible[ip] = toggle.checked; drawTracks(); });
+    header.appendChild(ipLabel);
+    header.appendChild(colorBox);
+    header.appendChild(toggle);
+    item.appendChild(header);
+    item.appendChild(posLabel);
+    container.appendChild(item);
   });
+}
+
+function rgbToHex(rgb) {
+  const [r, g, b] = rgb.match(/\d+/g).map(Number);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
 function replayTracks() {
@@ -699,8 +833,54 @@ function replayTracks() {
   const allT = Object.values(tracks).flatMap(a => a.map(p => p.t)); if (!allT.length) { replaying = false; return; }
   const maxT = Math.max(...allT); const minT = Math.min(...allT); const dur = maxT - minT || 1000; const start = Date.now();
   const canvas = document.getElementById('track-canvas'); if (!canvas) { replaying = false; return; }
-  const ctx = canvas.getContext('2d'); const centerX = canvas.width / 2, centerY = canvas.height / 2;
-  (function step() { const el = Date.now() - start; const nowT = minT + (el / dur) * (maxT - minT); ctx.clearRect(0, 0, canvas.width, canvas.height); Object.keys(tracks).forEach(port => { if (!trackVisible[port]) return; const pts = tracks[port].filter(p => p.t <= nowT); ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[port]; for (let i = 0; i < pts.length; i++) { const px = centerX + pts[i].x * 20; const py = centerY - pts[i].y * 20; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } ctx.stroke(); }); if (el < dur) requestAnimationFrame(step); else replaying = false; })();
+  const ctx = canvas.getContext('2d');
+  const centerX = canvas.width / 2 + offsetX; // Note: offsetX/Y need to be defined in scope, but assuming from setup
+  const centerY = canvas.height / 2 + offsetY;
+  (function step() {
+    const el = Date.now() - start;
+    const nowT = minT + (el / dur) * (maxT - minT);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Redraw axes and ticks as in drawTracks
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(canvas.width, centerY);
+    ctx.moveTo(centerX, 0);
+    ctx.lineTo(centerX, canvas.height);
+    ctx.stroke();
+
+    // Ticks and labels similarly...
+
+    Object.keys(tracks).forEach(ip => {
+      if (!trackVisible[ip]) return;
+      const pts = tracks[ip].filter(p => p.t <= nowT);
+      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[ip];
+      for (let i = 0; i < pts.length; i++) {
+        const px = centerX + pts[i].x * scale;
+        const py = centerY - pts[i].y * scale;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    });
+    if (el < dur) requestAnimationFrame(step); else { replaying = false; drawTracks(); }
+  })();
+}
+
+function fitToWindow() {
+  const allPoints = Object.values(tracks).flat();
+  if (!allPoints.length) return;
+  const minX = Math.min(...allPoints.map(p => p.x));
+  const maxX = Math.max(...allPoints.map(p => p.x));
+  const minY = Math.min(...allPoints.map(p => p.y));
+  const maxY = Math.max(...allPoints.map(p => p.y));
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const canvas = document.getElementById('track-canvas');
+  scale = Math.min(canvas.width / (width * 1.1), canvas.height / (height * 1.1));
+  offsetX = canvas.width / 2 - (minX + width / 2) * scale;
+  offsetY = canvas.height / 2 + (minY + height / 2) * scale; // inverted y
+  drawTracks();
 }
 
 // helpers

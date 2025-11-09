@@ -17,8 +17,8 @@ function createWindow() {
   });
 
   mainWin.loadFile('renderer/index.html');
-  Menu.setApplicationMenu(null);
-  mainWin.webContents.openDevTools();
+  // Menu.setApplicationMenu(null);
+  // mainWin.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
