@@ -1,11 +1,11 @@
 {
-  "name": "xingji",
-  "version": "0.3.0",
-  "description": "行迹 — 多设备惯导控制 (Electron)",
+  "name": "WalkingJourney",
+  "version": "0.7.0",
+  "description": "行迹 — 多设备惯导控制",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-packager . xingji --platform=win32 --arch=x64 --overwrite"
+    "pack": "electron-packager . WalkingJourney --platform=win32 --arch=x64 --overwrite"
   },
   "dependencies": {
     "electron": "^25.0.0",

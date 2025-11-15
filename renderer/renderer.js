@@ -280,7 +280,17 @@ function layoutGrid(forceRebuild = false) {
     for (let i = 0; i < count; i++) {
       const conn = connections[i];
       const card = document.createElement('div'); card.className = 'card'; card.style.background = '#fff'; card.style.borderRadius = '8px'; card.style.padding = '8px'; card.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)'; card.style.height = '100%';
-      const title = document.createElement('div'); title.textContent = conn ? conn.ip : ('设备 ' + (i + 1)); title.style.fontWeight = '700';
+      const title = document.createElement('div'); title.textContent = conn ? conn.ip : ('设备 ' + (i + 1)); title.style.fontWeight = '700'; 
+      // if (conn && conn.ip) {
+        title.style.cursor = 'pointer';
+        // title.style.textDecoration = 'underline';
+        title.style.color = '#2b6ef6';
+        title.addEventListener('click', (e) => {
+          const url = `http://${conn.ip}`;
+          e.preventDefault();
+          electronAPI.openUrl(url);
+        });
+      // }
       card.appendChild(title);
       const threeDiv = document.createElement('div'); threeDiv.style.flex = '1'; threeDiv.style.minHeight = '0'; card.appendChild(threeDiv);
       grid.appendChild(card);
@@ -304,7 +314,7 @@ function layoutGrid(forceRebuild = false) {
 function updateModelFromConn(model, conn) {
   if (conn && conn.lastMsg && conn.lastMsg.quat) {
     try {
-      let q = conn.lastMsg.quat[4];
+      let q = conn.lastMsg.quat[0];           // 设置为第一个传感器的数据
       if (Array.isArray(q) && Array.isArray(q[0])) q = q[0];
       const w = q[0], x = q[1], y = q[2], z = q[3];
       const threeQ = new THREE.Quaternion(-y, x, z, w);

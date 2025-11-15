@@ -1,5 +1,5 @@
 // main.js
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell} = require('electron');
 const path = require('path');
 const { WSManager } = require('./src/wsManager');
 
@@ -77,10 +77,13 @@ app.whenReady().then(() => {
       wsMgr.broadcast(JSON.parse(args));
     } catch (e) { }
   });
-
+  ipcMain.on('open-url', (event, url) => {
+    shell.openExternal(url);
+  });
   createWindow();
 });
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
+

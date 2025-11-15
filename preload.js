@@ -16,4 +16,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWSScanResult: (cb) => ipcRenderer.on('ws-scan-result', (e, d) => cb(d)),
   onPortScanUpdate: (cb) => ipcRenderer.on('port-scan-update', (e, d) => cb(d)), // kept but unused
   onWSMessage: (cb) => ipcRenderer.on('ws-message', (e, d) => cb(d)),
+  openUrl: (url) => ipcRenderer.send('open-url', url),
 });
