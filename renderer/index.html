@@ -15,7 +15,6 @@
     <button id="btn-disconnect">断开连接</button>
     <button id="btn-record">录制</button>
     <button id="btn-zero">方向归零</button>
-    <button id="btn-accel">加计校准</button>
     <button id="btn-inertial">惯导重置</button>
     <button id="btn-shutdown">关机</button>
   </div>
@@ -37,11 +36,32 @@
         <canvas id="track-canvas"></canvas>
       </div>
     </div>
+    <!-- Device detail pages container - dynamically created iframes -->
+    <div id="device-pages-container"></div>
   </div>
 
   <div id="bottombar">
-    <button data-page="attitude" class="page-switch active">设备姿态</button>
-    <button data-page="track" class="page-switch">设备轨迹</button>
+    <div class="tab-container">
+      <div class="tab-slider"></div>
+      <button data-page="attitude" class="page-tab active">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span>设备姿态</span>
+      </button>
+      <button data-page="track" class="page-tab">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <span>设备轨迹</span>
+      </button>
+      <div id="device-tabs"></div>
+    </div>
+    <div class="bottombar-info">
+      <span id="connection-count">0 台设备</span>
+    </div>
   </div>
 
   <div id="modal" class="hidden"></div>

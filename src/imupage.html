@@ -1,0 +1,1805 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width,initial-scale=1" name="viewport"/>
+    <title>IMU GUI</title>
+    <link href="./uplot.css" rel="stylesheet">
+    <style>
+        /* ===== 全局样式 ===== */
+        :root{
+            --bg: #f6f8fb;
+            --card: #ffffff;
+            --text: #222;
+            --muted: #666;
+            --accent: #2563eb;
+            --glass: rgba(255,255,255,0.6);
+            --success:#16a34a;
+            --danger:#ef4444;
+            --shadow: 0 6px 18px rgba(22,28,45,0.08);
+            --radius:12px;
+            --mono: 'ui-monospace', SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
+            transition: background .25s, color .25s;
+        }
+        [data-theme="dark"]{
+            --bg: #0a0e1a;
+            --card: #141b2d;
+            --text: #e6eef8;
+            --muted: #8b9bb8;
+            --accent: #5b9cff;
+            --glass: rgba(255,255,255,0.05);
+            --shadow: 0 8px 30px rgba(0,0,0,0.7);
+        }
+
+        /**{box-sizing:border-box} height:100%;margin:0;*/
+        html,body{font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:var(--bg); color:var(--text);transition: background-color 0.3s ease, color 0.3s ease;}
+        a{color:var(--accent)}
+
+        /* 顶栏 */
+        header.appbar{
+            display:flex;align-items:center;gap:12px;
+            padding:12px 20px;background:linear-gradient(90deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
+            backdrop-filter: blur(10px);box-shadow:var(--shadow);
+            position: sticky;top: 0;z-index: 1000;
+        }
+        .brand{display:flex;align-items:center;gap:12px}
+        .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;box-shadow:0 6px 18px rgba(37,99,235,0.15)}
+        .title{font-size:1.1rem;font-weight:600}
+        .subtitle{font-size:0.85rem;color:var(--muted)}
+
+        /* 操作区 */
+        .controls{margin-left:auto;display:flex;gap:10px;align-items:center}
+        .btn{background:var(--card);border:1px solid rgba(0,0,0,0.05);padding:8px 12px;min-width: 40px; border-radius:9px;cursor:pointer;box-shadow:var(--shadow);transition:transform .12s ease,box-shadow .12s;color:var(--shadow);flex-wrap: nowrap; }
+        .btn:active{transform:translateY(1px)}
+        .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04)}
+
+        /* 主内容布局 */
+        .wrap{padding:8px;display:grid;grid-template-columns: 360px 1fr;gap:18px;align-items:start}
+        .hidden {display: none;}
+        @media (max-width:1200px){.wrap{grid-template-columns:1fr;}}
+
+        /* 侧边栏 */
+        aside.panel{background:var(--card);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);min-height:200px}
+        .nav{display:flex;flex-direction:column;gap:8px;user-select:none;
+            position: sticky;bottom: 0;z-index: 999; }
+        .nav button{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;border:none;background:transparent;cursor:pointer;color:var(--muted)}
+        .nav button.active{background:linear-gradient(90deg,var(--glass),transparent);color:var(--text);font-weight:600}
+
+        /* 禁止标志 */
+        .flags-container {display: flex;gap: 10px;position: relative;}
+        .flag {display: inline-block;width: 20px;height: 20px;border-radius: 4px; margin: 5px 5px 0;position: relative;}
+        .flag-animation {position: absolute;border-radius: 4px;pointer-events: none;animation: expandAndFade 1s ease-out forwards;}
+        @keyframes expandAndFade {
+            0% {width: 18px;height: 18px;opacity: 1;transform: translate(-50%, -50%) scale(1);}
+            100% {width: 25px;height: 25px;opacity: 0;transform: translate(-50%, -50%) scale(1.5);}}
+
+        /* 状态卡 */
+        .status{display:flex;gap:10px;align-items:center}
+        .dot{width:12px;height:12px;border-radius:50%}
+        .dot.connect{background:var(--success)}
+        .dot.off{background:var(--danger)}
+
+        /* --- 5. 图标显示/隐藏逻辑 --- */
+        .theme-icon {display: flex;align-items: center;justify-content: center;width: 24px;height: 24px;}
+        .sun-icon{stroke: #000000;}
+        .moon-icon {position: absolute;stroke: #ffffff;transition: opacity 0.3s ease, transform 0.3s ease, stroke 0.3s ease;}
+        [data-theme="light"] .sun-icon {opacity: 1;transform: scale(1) rotate(0deg);}
+        [data-theme="light"] .moon-icon {opacity: 0;transform: scale(0.5) rotate(-90deg);}
+        [data-theme="dark"] .moon-icon {opacity: 1;transform: scale(1) rotate(0deg);}
+        [data-theme="dark"] .sun-icon {opacity: 0;transform: scale(0.5) rotate(90deg);}
+
+        /* 卡片 */
+        .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:var(--shadow);}
+        .card h4{margin:0 0 8px 0}
+
+        /* 数据表格组（响应式：每组为一张表） */
+        .data-grid{display:flex;flex-direction:column;gap:12px}
+        .group{overflow:hidden;border-radius:10px}
+        .group .group-title{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:linear-gradient(90deg,transparent,rgba(0,0,0,0.02));font-weight:600}
+        .group table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;table-layout:fixed}
+        .group thead th{font-size:0.85rem;padding:8px;text-align:center;background:rgba(0,0,0,0.03);width:110px}
+        .group thead th.ts{width:140px}
+        .group tbody td{padding:6px;text-align:center;font-family:var(--mono);white-space:nowrap;width:110px}
+        .label-col{font-weight:700;text-align:left;padding-left:12px}
+
+        /* 保证数字列固定宽度，不随小数点变化overflow:hidden;text-overflow:ellipsis; */
+        .num{width:110px;max-width:110px;white-space: pre-line;}
+        .num.small{width:80px;max-width:80px}
+        .ts{width:140px;margin-top: 10px}
+
+        /* 图表区 */
+        .plots{display:flex;flex-direction:row;gap:12px}
+        /*display:flex;*/
+        .plot-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:6px}
+        .plot-controls{display:flex;gap:8px;align-items:center}
+        #charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        @media (max-width:900px){#charts{grid-template-columns:1fr}}
+
+        /*.uplot{height:220px}*/
+
+        /* 设置区（拖拽轨道） */
+        .palette{display:flex;flex-wrap:wrap;gap:8px;padding:8px;border-radius:8px;background:linear-gradient(90deg,transparent,rgba(0,0,0,0.02))}
+        .item{padding:6px 8px;border-radius:8px;background:rgba(0,0,0,0.03);cursor:grab;user-select:none}
+        .lane{min-height:56px;border-radius:8px;padding:8px;background:linear-gradient(90deg,transparent,rgba(0,0,0,0.01));display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .slot{min-width:44px;height:34px;border-radius:6px;padding:4px 6px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;border:1px dashed rgba(0,0,0,0.06)}
+        .slot .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:var(--accent);color:white;cursor:move;transition:transform 0.2s,box-shadow 0.2s}
+        .slot .chip:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,0,0,0.15)}
+        .slot .chip.dragging{opacity:0.5;transform:scale(0.95)}
+        .slot.drag-over{background:rgba(37,99,235,0.1);border-color:var(--accent)}
+
+        /* 微交互动效 */
+        .fade-in{animation:fadeIn .35s ease both}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+        /* 小屏优化 */
+        @media (max-width:600px){.btn{padding:8px 10px}}
+
+        /* ===== 自定义Select下拉框 ===== */
+        .custom-select {position: relative;user-select: none;/*min-width: 180px;*/font-family: inherit;display: flex;align-items: center;}
+        .select-trigger {display: flex;align-items: center;justify-content: space-between;padding: 10px 14px;background: var(--card);border: 1px solid rgba(0, 0, 0, 0.04);border-radius: 10px;cursor: pointer;box-shadow: var(--shadow);transition: all 0.2s ease;color: var(--text);font-size: 0.9rem;}
+        .select-trigger:hover {border-color: rgba(37, 99, 235, 0.2);box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);}
+        .select-trigger:active {transform: translateY(1px);box-shadow: 0 2px 8px rgba(22, 28, 45, 0.08);}
+        .select-trigger::after {content: '';width: 8px;height: 8px;border-right: 2px solid var(--muted);border-bottom: 2px solid var(--muted);transform: rotate(45deg);transition: transform 0.3s ease;margin-left: 8px;}
+        .select-trigger.active::after {transform: rotate(-135deg);}
+        .select-options {position: absolute;top: calc(100% + 8px);left: 0;right: 0;background: var(--card);border-radius: 10px;box-shadow: var(--shadow);z-index: 100;opacity: 0;visibility: hidden;transform: translateY(-10px);transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);max-height: 280px;overflow-y: auto;border: 1px solid rgba(0, 0, 0, 0.04);}
+        .select-options.show {opacity: 1;visibility: visible;transform: translateY(0);}
+        .select-option {padding: 10px 14px;cursor: pointer;transition: all 0.15s ease;color: var(--text);font-size: 0.9rem;display: flex;align-items: center;gap: 8px;}
+        .select-option:hover {background: linear-gradient(90deg, var(--glass), transparent);color: var(--accent);padding-left: 18px;}
+        .select-option.selected {background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), transparent);color: var(--accent);font-weight: 500;}
+        .select-option:first-child {border-radius: 10px 10px 0 0;}
+        .select-option:last-child {border-radius: 0 0 10px 10px;}
+
+        /* 滚动条样式 */
+        .select-options::-webkit-scrollbar {width: 6px;}
+        .select-options::-webkit-scrollbar-track {background: rgba(0, 0, 0, 0.02);border-radius: 3px;}
+        .select-options::-webkit-scrollbar-thumb {background: rgba(0, 0, 0, 0.1);border-radius: 3px;}
+        .select-options::-webkit-scrollbar-thumb:hover {background: rgba(0, 0, 0, 0.15);}
+
+        /* 暗黑模式优化 */
+        [data-theme="dark"] .select-trigger {border-color: rgba(255, 255, 255, 0.06);}
+        [data-theme="dark"] .select-trigger:hover {border-color: rgba(79, 140, 255, 0.3);box-shadow: 0 4px 12px rgba(79, 140, 255, 0.1);}
+        [data-theme="dark"] .select-options {border-color: rgba(255, 255, 255, 0.06);}
+        [data-theme="dark"] .select-option:hover {background: linear-gradient(90deg, rgba(79, 140, 255, 0.1), transparent);}
+        [data-theme="dark"] .select-option.selected {background: linear-gradient(90deg, rgba(79, 140, 255, 0.15), transparent);}
+        [data-theme="dark"] .select-options::-webkit-scrollbar-track {background: rgba(255, 255, 255, 0.04);}
+        [data-theme="dark"] .select-options::-webkit-scrollbar-thumb {background: rgba(255, 255, 255, 0.1);}
+        [data-theme="dark"] .select-options::-webkit-scrollbar-thumb:hover {background: rgba(255, 255, 255, 0.15);}
+
+        /* 响应式优化 */
+        @media (max-width: 600px) {
+            .select-trigger {    padding: 8px 12px;    font-size: 0.85rem;}
+            .select-option {    padding: 8px 12px;    font-size: 0.85rem;}
+        }
+
+        /* 通知容器 */
+        .notification-container {position: fixed;flex-direction:column;top: 0;left: 0;right: 0;z-index: 9998;display: flex;justify-content: center;align-items: center;pointer-events: none;    }
+        /* 通知主体 */
+        .notification {margin-top: -50px;padding: 16px 24px;border-radius: 8px;font-size: 16px;font-weight: 500;box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);transition: margin-top 0.4s ease-out;pointer-events: auto;display: flex;align-items: center;gap: 12px;max-width: 90%;word-wrap: break-word;}
+        /* 通知类型颜色 */
+        .notification.info {background-color: #e3f2fd;color: #1976d2;}
+        .notification.warning {background-color: #fff8e1;color: #f57c00;}
+        .notification.error {background-color: #ffebee;color: #d32f2f;}
+        .notification.success {background-color: #e8f5e9;color: #388e3c;}
+        /* 显示状态 */
+        .notification.show {margin-top: 10px;}
+
+        /* 输入框样式 */
+        .input-group {position: relative;margin-bottom: 6px;}
+        .input-field {width: 100%;padding: 10px;font-size: 13px;background-color: var(--glass);color: var(--text);border: 1px solid var(--muted);border-radius: var(--radius);outline: none;transition: all 0.3s;box-sizing: border-box;}
+        .input-field:focus {border-color: var(--accent);box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);}
+        .input-label {position: absolute;top: 10px;left: 12px;font-size: 14px;pointer-events: none;transition: all 0.3s;background-color: var(--card);padding: 0 5px;}
+        .input-group.error .input-field {border-color: var(--danger);}
+        .input-group.error .input-field:focus {box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);}
+        .input-group.error .input-label {color: var(--danger);}
+        /* 错误状态样式 */
+        .input-field:invalid:not(:placeholder-shown):focus {box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);}
+        .input-field:not(:placeholder-shown) ~ .input-label {top: -10px;font-size: 12px;}
+        /* 有效 & 聚焦：蓝色 */
+        .input-field:valid:not(:placeholder-shown):focus  ~ .input-label {color: var(--accent);}
+        .input-field:valid:not(:placeholder-shown):focus {border-color: var(--accent);}
+        /* 有效 & 非聚焦：灰色 */
+        .input-field:valid:not(:placeholder-shown):not(:focus) ~ .input-label {color: var(--muted);}
+        .input-field:valid:not(:placeholder-shown):not(:focus) {border-color: var(--muted);}
+        /* 无效：不论聚焦，都为红色 */
+        .input-field:invalid:not(:placeholder-shown) ~ .input-label {color: var(--danger);}
+        .input-field:invalid:not(:placeholder-shown) {border-color: var(--danger);}
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            user-select: none;
+            width: 20px;
+            height: 20px;
+        }
+
+    </style>
+</head>
+<body data-theme="light">
+<header class="appbar">
+    <div class="brand">
+        <div class="logo">IM</div>
+        <div>
+            <div class="title">IMU Viewer</div>
+            <div class="subtitle">实时数据 配置参数</div>
+        </div>
+    </div>
+    <div class="controls">
+        <div class="status card" style="display:flex;align-items:center;gap:10px">
+            <div class="dot off" id="connDot"></div>
+            <div style="min-width:100px">
+                <div id="connStatus">未连接</div>
+                <div class="subtitle" id="connHint">尝试连接：<span id="wsPath"></span></div>
+            </div>
+        </div>
+
+        <button class="btn" id="themeBtn">
+            <span class="theme-icon">
+                <!-- 月亮图标 (用于夜间模式) -->
+                <svg class="moon-icon" height="1.5em" stroke="currentColor" stroke-linecap="round"
+                     stroke-linejoin="round" stroke-width="2" style="overflow: visible;" viewBox="0 0 24 24" width="1.5em"
+                     xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+                </svg>
+                <!-- 太阳图标 (用于日间模式) -->
+                <svg class="sun-icon" height="1.5em" stroke="currentColor" stroke-linecap="round"
+                     stroke-linejoin="round" stroke-width="2" style="overflow: visible;" viewBox="0 0 24 24" width="1.5em"
+                     xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                </svg>
+            </span>
+        </button>
+        <button class="btn" id="reconnectBtn">重连</button>
+    </div>
+
+</header>
+<div class="notification-container" id="notificationContainer"></div>
+<div class="wrap">
+
+    <!-- 侧边导航 -->
+    <aside class="panel">
+        <div class="nav">
+            <button class="active" data-view="dataView">实时数据</button>
+            <button data-view="plotView">折线图</button>
+            <button data-view="settingsView">设置</button>
+        </div>
+        <div style="height:12px"></div>
+        <div class="card">
+            <h4>连接信息</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px;line-height:1.5;">
+                <div>硬件序列号</div><span id="imu_mac">— —</span>
+                <div>设备 ip 地址 </div><span id="ip_addr">— —</span>
+                <div>Wifi Mac地址 </div><span id="wifi_mac">— —</span>
+                <div>Web Socket</div> <strong><span id="wsPath2">— —</span></strong>
+                <div>传 感 器 数 量</div> <strong id="sensorCount">— —</strong>
+                <div>最后更新时间</div> <span id="lastUpdate">— —</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:8px;line-height:1.5;">
+                <button class="btn" id="setZeroBtn">设置零位</button>
+                <button class="btn" id="certAccelBtn">惯导重置</button>
+                <button class="btn" id="shutdownBtn" >关 机</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主区 -->
+    <main>
+        <!-- 实时数据视图 -->
+        <section class="card fade-in" id="dataView">
+            <h4>实时数据（表格）</h4>
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+                <div class="card"
+                     style="flex:1;min-width:240px;display:flex;align-items:center;justify-content:space-between">
+                    <div>
+                        <div class="subtitle">电池</div>
+                        <div id="battery" style="font-weight:700;font-size:1.2rem">-- %</div>
+                    </div>
+                    <div>
+                        <div class="subtitle">静止标志</div>
+                        <div class="flags-container" id="stationaryFlags">
+                            <div class="flag" data-index="0"></div>
+                            <div class="flag" data-index="1"></div>
+                            <div class="flag" data-index="2"></div>
+                            <div class="flag" data-index="3"></div>
+                            <div class="flag" data-index="4"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card" style="width:320px;min-width:220px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div>
+                        <div class="subtitle">时间戳 (us)</div>
+                        <div class="ts" id="tsDisplay" style="font-family:var(--mono);font-weight:700">--</div>
+                    </div>
+                    <div>
+                        <div class="subtitle">刷新率 (Hz)</div>
+                        <div class="ts" id="refreshRate" style="font-family:var(--mono);font-weight:700">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="data-grid" id="groupsContainer">
+                <!-- 各数据组的表格会由 JS 动态生成 -->
+            </div>
+        </section>
+
+        <!-- 折线图视图 -->
+        <section class="card fade-in hidden" id="plotView">
+            <h4>折线图（uPlot）</h4>
+            <div class="plot-header">
+                <div class="plot-controls">
+                    <div class="custom-select" id="plotSelectType">
+                        <div class="select-trigger">
+                            <span class="select-value">请选择</span>
+                        </div>
+                        <div class="select-options"></div>
+                    </div>
+                    <div class="custom-select" id="plotSelectSensor">
+                        <div class="select-trigger">
+                            <span class="select-value">请选择</span>
+                        </div>
+                        <div class="select-options"></div>
+                    </div>
+
+                    <div class="custom-select" id="plotSelectAxis">
+                        <div class="select-trigger">
+                            <span class="select-value">请选择</span>
+                        </div>
+                        <div class="select-options"></div>
+                    </div>
+
+                    <button class="btn" id="addSeriesBtn">添加曲线</button>
+                    <button class="btn" id="clearSeriesBtn">清空曲线</button>
+                </div>
+                <!--                <div class="subtitle">时间窗口: <span id="timeWindowLabel">10s</span> （用鼠标滚轮横向缩放）</div>-->
+            </div>
+            <div id="charts">
+                <div class="card" style="min-height:260px">
+                    <div class="uplot" id="mainChart" style="height:220px"></div>
+                </div>
+                <div class="card" style="min-height:260px">
+                    <div style="display:flex;flex-direction:column;height:100%">
+                        <div id="seriesList" style="flex:1;overflow:auto"></div>
+                    </div>
+                </div>
+            </div>
+</section>
+<!-- 设置视图 -->
+        <section class="card fade-in hidden" id="settingsView">
+            <div style="display:flex;flex-wrap:wrap;gap:12px">
+                <div class="card" style="flex:1;min-width:500px">
+                    <h4>设置传输模式与频率</h4>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+                        <!-- 支持 tcp/udp/usb/serial/bluetooth -->
+                        <div class="custom-select" id="tcp_mode">
+                            <label>TCP 模式</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="tcp_freq">
+                            <label>TCP 频率（Hz）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="udp_mode">
+                            <label>UDP 模式</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="udp_freq">
+                            <label>UDP 频率（Hz）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="usb_mode">
+                            <label>USB 模式</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="usb_freq">
+                            <label>USB 频率（Hz）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="serial_mode">
+                            <label>Serial 模式</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="serial_freq">
+                            <label>Serial 频率（Hz）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="bluetooth_mode">
+                            <label>Bluetooth 模式</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="bluetooth_freq">
+                            <label>Bluetooth 频率（Hz）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                    </div>
+                    <div style="height:12px"></div>
+                    <button class="btn" id="resetModeBtn">重置</button>
+                    <button class="btn" id="sendModeBtn">确认</button>
+
+                </div>
+                <div class="card" style="flex:1;min-width:500px">
+                    <h4>WIFI和蓝牙传输设置</h4>
+                    <div style="display:grid;grid-template-columns:5fr 5fr;gap:8px;margin-top:15px;margin-bottom:8px">
+                        <div class="input-group">
+                            <input type="text" pattern=".{1,32}" class="input-field" id="wifi-uuid" placeholder=" " required>
+                            <label class="input-label" for="wifi-uuid">Wifi名称</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="password" class="input-field" id="wifi-password" placeholder=" " required>
+                            <label class="input-label" for="wifi-password">Wifi密码</label>
+                            <span class="toggle-password" id="toggle-password">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:3fr 6fr 3fr 3fr;gap:8px;margin-top:15px;margin-bottom:8px"><!--grid-column: span 2;-->
+                        <div class="input-group">
+                            <input type="text"  pattern="^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$" class="input-field" id="tcp_trans_port" placeholder=" " required>
+                            <label class="input-label" for="tcp_trans_port">TCP通信端口</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" pattern="^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$" class="input-field" id="udp_host_ip" placeholder=" " required>
+                            <label class="input-label" for="udp_host_ip">UDP主机地址</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text"  pattern="^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$" class="input-field" id="udp_host_port" placeholder=" " required>
+                            <label class="input-label" for="udp_host_port">UDP主机端口</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text"  pattern="^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$" class="input-field" id="udp_slave_port" placeholder=" " required>
+                            <label class="input-label" for="udp_slave_port">UDP从机端口</label>
+                        </div>
+                    </div>
+                    <button class="btn" id="resetConnectionSettingBtn">重置</button>
+                    <button class="btn" id="sendConnectionSettingBtn">确认</button>
+                </div>
+                <div class="card" style="flex:1;min-width:450px">
+                    <div class="subtitle">包结构（拖拽到轨道）</div>
+                    <div class="palette" id="palette"></div>
+                    <div style="height:8px"></div>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        <div class="subtitle">轨道（最多 5 行）</div>
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                            <div class="lane" data-lane="0" id="lane0"></div>
+                            <div class="lane" data-lane="1" id="lane1"></div>
+                            <div class="lane" data-lane="2" id="lane2"></div>
+                            <div class="lane" data-lane="3" id="lane3"></div>
+                            <div class="lane" data-lane="4" id="lane4"></div>
+                        </div>
+                    </div>
+                    <div style="height:12px"></div>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn" id="resetPacketsBtn">读取设备配置</button>
+                        <button class="btn" id="sendPacketsBtn">发送包配置</button>
+                        <button class="btn ghost" id="clearLanesBtn">清空轨道</button>
+                    </div>
+                </div>
+            </div>
+            <div style="height:12px"></div>
+        </section>
+    </main>
+</div>
+
+<!-- uPlot -->
+<script src="./uplot.js"></script>
+<script>
+    // ===== 常量定义 =====
+    const BMI088_NUM = 4; // 0..3 实际传感器，4 为综合/平均
+    // const WS_PATH = `http://192.168.137.93/ws`;
+    const WS_PATH = `http://${window.location.host}/ws`;
+    document.getElementById('wsPath').textContent = WS_PATH;
+    document.getElementById('wsPath2').textContent = WS_PATH;
+    const RECONNECT_DELAY = 2000;
+
+    // ===== 状态变量 =====
+    let ws = null;
+    let connected = false;
+    let lastTs = null;
+    let buffers = {}; // 存放历史数据用于 uPlot
+    let plots = {main: null};
+    let visibleSeries = []; // 当前主图的 series 列表
+    let timeWindowMs = 5000000; // 默认 10秒窗口
+    
+    // 刷新率计算相关
+    let messageTimestamps = [];
+    let currentRefreshRate = 0;
+    let refreshRateHistory = []; // 用于滑动平均
+    const REFRESH_RATE_WINDOW = 5; // 平均窗口大小
+
+    // 初始化 buffers 结构
+    function initBuffers() {
+        // 存 timestamp + 若干序列，统一以 timestamp 数组为第0列
+        buffers = {t: []};
+    }
+
+    initBuffers();
+
+    // ===== UI 快速引用 =====
+    const connDot = document.getElementById('connDot');
+    const connStatus = document.getElementById('connStatus');
+    const connHint = document.getElementById('connHint');
+    const sensorCountEl = document.getElementById('sensorCount');
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    const batteryEl = document.getElementById('battery');
+    const stationaryEl = document.getElementById('stationaryFlags');
+    const groupsContainer = document.getElementById('groupsContainer');
+    const themeBtn = document.getElementById('themeBtn');
+    const reconnectBtn = document.getElementById('reconnectBtn');
+    const reconnectManualBtn = document.getElementById('reconnectBtn');
+    const refreshRateEl = document.getElementById('refreshRate');
+    // const dumpBtn = document.getElementById('dumpBtn');
+
+    sensorCountEl.textContent = BMI088_NUM.toString();
+    
+    // 刷新率计算函数（带滑动平均滤波）
+    function updateRefreshRate() {
+        const now = Date.now();
+        messageTimestamps.push(now);
+        
+        // 只保留最近1秒内的时间戳
+        messageTimestamps = messageTimestamps.filter(ts => now - ts <= 1000);
+        
+        // 计算当前刷新率
+        const instantRate = messageTimestamps.length;
+        
+        // 添加到历史记录
+        refreshRateHistory.push(instantRate);
+        if (refreshRateHistory.length > REFRESH_RATE_WINDOW) {
+            refreshRateHistory.shift();
+        }
+    }
+    
+    // 每秒更新一次刷新率显示
+    setInterval(() => {
+        if (refreshRateHistory.length > 0) {
+            const avgRate = Math.round(refreshRateHistory.reduce((a, b) => a + b, 0) / refreshRateHistory.length);
+            refreshRateEl.textContent = avgRate.toString();
+        }
+    }, 1000);
+
+    // ===== 主题切换 =====
+    const sunIcon = themeBtn.querySelector('.sun-icon');
+    const moonIcon = themeBtn.querySelector('.moon-icon');
+    (function () {
+        const body = document.body;
+
+        function toggleTheme() {
+
+            const cur = body.getAttribute('data-theme');
+            if (cur === 'dark') {
+                body.classList.remove('night-mode');
+                body.setAttribute('data-theme', 'light');
+                // themeBtn.textContent = '切换夜间模式';
+            } else {
+                body.classList.add('night-mode');
+                body.setAttribute('data-theme', 'dark');
+                // themeBtn.textContent = '切换日间模式';
+            }
+        }
+
+        themeBtn.addEventListener('click', () => {
+            toggleTheme();
+        });
+    })();
+
+    // ===== 导航处理 =====
+    document.querySelectorAll('aside .nav button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('aside .nav button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const view = btn.dataset.view;
+            document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(view).classList.remove('hidden');
+        });
+    });
+
+    document.getElementById('setZeroBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        ws.send(JSON.stringify({cmd: 'setZero'}));
+        showNotification("成功发送设置零位指令",'success');
+    });
+    document.getElementById('certAccelBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        ws.send(JSON.stringify({cmd: 'insZero'}));
+        showNotification("成功发送惯导重置指令",'success');
+    });
+    document.getElementById('shutdownBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        ws.send(JSON.stringify({cmd: 'shutdown'}));
+        showNotification("成功发送关机指令");
+    });
+    // ===== WebSocket 连接逻辑（自动重连） =====
+    function setConnState(ok) {
+        connected = ok;
+        if (ok) {
+            connDot.classList.remove('off');
+            connDot.classList.add('connect');
+            connStatus.textContent = '已连接';
+            connHint.textContent = WS_PATH;
+        } else {
+            connDot.classList.remove('connect');
+            connDot.classList.add('off');
+            connStatus.textContent = '未连接';
+            connHint.textContent = '正在尝试连接...';
+        }
+    }
+
+    let last_receive_time = -20000;
+
+    function connect() {
+        try {
+            console.log('尝试连接 WebSocket:', WS_PATH);
+            ws = new WebSocket(WS_PATH);
+        } catch (e) {
+            console.warn('WebSocket 构造失败', e);
+            setConnState(false);
+            setTimeout(connect, RECONNECT_DELAY);
+            return;
+        }
+        ws.onopen = () => {
+            setConnState(true);
+            ws.send(JSON.stringify({cmd: 'getSettings'}));
+            ws.send(JSON.stringify({cmd: 'getPacketList'}));
+            ws.send(JSON.stringify({cmd: 'getConnSettings'}));
+            ws.send(JSON.stringify({cmd: 'getDeviceInfos'}));
+            console.log('ws open');
+        };
+        ws.onclose = () => {
+            setConnState(false);
+            console.log('ws close');
+            setTimeout(connect, RECONNECT_DELAY);
+        };
+        ws.onerror = (e) => {
+            console.warn('ws error', e);
+            setConnState(false);
+        };
+        ws.onmessage = (evt) => {
+            // 期望 JSON 格式，包含 ts, gyro, raw_accel, ... 等字段
+            try {
+                last_receive_time = Date.now();
+                const msg = JSON.parse(evt.data);
+                handleIMU(msg);
+            } catch (e) {
+                console.warn('无法解析消息', e);
+            }
+        };
+    }
+
+    connect();
+    reconnectBtn.addEventListener('click', () => {
+        if (ws) ws.close();
+        setTimeout(connect, 500);
+    });
+    // dumpBtn.addEventListener('click', () => { // 请求一次快照，消息结构随固件约定
+    //     if (ws && connected) ws.send(JSON.stringify({cmd: 'request_snapshot'}));
+    // });
+
+    // 静止标志函数
+    // 初始状态
+    let stationaryFlags = [1, 1, 1, 1, 1];
+    const flagsContainer = document.getElementById('stationaryFlags');
+    const flagElements = flagsContainer.querySelectorAll('.flag');
+    initializeFlags();
+    function initializeFlags() {
+        flagElements.forEach((flag, index) => {
+            flag.style.backgroundColor = 'transparent';
+        });
+    }
+    function createAnimation(flagElement, color) {
+        const animation = document.createElement('div');
+        animation.className = 'flag-animation';
+
+        // 获取flag元素的位置和大小
+        const rect = flagElement.getBoundingClientRect();
+        const containerRect = flagsContainer.getBoundingClientRect();
+
+        // 设置动画元素的初始位置和样式
+        animation.style.left = `${rect.left - containerRect.left + rect.width / 2}px`;
+        animation.style.top = `${rect.top - containerRect.top + rect.height / 2}px`;
+        animation.style.border = `1.2px solid ${color}`;
+
+        // 添加到容器中
+        flagsContainer.appendChild(animation);
+
+        // 动画结束后移除元素
+        setTimeout(() => {
+            animation.remove();
+        }, 1000);
+    }
+
+    // ===== 动态生成数据表格（每组一个表格） =====
+    // 定义需要展示的数据组及其维度 (name, dims)
+    const DATA_GROUPS = [
+        {key:'raw_accel',name:'原始加速度',dims:3},
+        {key:'raw_gyro',name:'原始陀螺仪',dims:3},
+        {key:'raw_temp',name:'原始温度',dims:1},
+        {key:'quat',name:'四元数',dims:4},
+        {key:'rotation_matrix',name:'旋转矩阵',dims:9},
+        {key:'eular',name:'欧拉角',dims:3},
+        {key:'linear_accel',name:'线性加速度',dims:3},
+        {key:'earth_accel',name:'地球加速度',dims:3},
+        {key:'kf_accel',name:'卡尔曼加速度',dims:3},
+        {key:'kf_velocity',name:'原始速度',dims:3},
+        {key:'displacement',name:'位移',dims:3},
+        {key:'stationary',name:'静止状态',dims:1}
+    ];
+
+    function buildGroups() {
+        groupsContainer.innerHTML = '';
+        DATA_GROUPS.forEach(g => {
+
+            const wrap = document.createElement('div');
+            wrap.className = 'group card';
+            const title = document.createElement('div');
+            title.className = 'group-title';
+            title.innerHTML = `<div>${g.name}</div><div class="subtitle">${g.key}</div>`;
+            wrap.appendChild(title);
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const trh = document.createElement('tr');
+            const lastColName = g.key === 'raw_temp' ? 'CPU' : 'Average';
+            trh.innerHTML = `<th class="ts">timestamp</th>` + Array.from({length: BMI088_NUM}).map((_, i) => `<th>sensor${i}</th>`).join('') + `<th>${lastColName}</th>`;
+            thead.appendChild(trh);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            // 初始一行提示
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="${BMI088_NUM + 1}">等待数据...</td>`;
+            tbody.appendChild(tr);
+            table.appendChild(tbody);
+            wrap.appendChild(table);
+            if (g.key === 'battery' || g.key === 'stationary') wrap.classList.add('hidden');
+            groupsContainer.appendChild(wrap);
+        });
+    }
+
+    buildGroups();
+
+    // ===== 格式化数值（固定小数位显示，保证列宽一致） =====
+    const fmt = (num, digits = 4) => {
+        if (typeof num !== 'number' || !isFinite(num)) return '--';
+        const formatted = num.toFixed(digits);
+        return num >= 0 ? `&nbsp;${formatted}` : formatted; // Add a space for positive numbers
+    };
+
+    // ===== 处理接收到的 IMU 数据 =====
+    function handleIMU(msg) {
+        if (msg.ts === 0) // 设置信息
+        {
+            updateCustomSelect('tcp_mode', msg.tcp_mode);
+            updateCustomSelect('udp_mode', msg.udp_mode);
+            updateCustomSelect('usb_mode', msg.usb_mode);
+            updateCustomSelect('serial_mode', msg.serial_mode);
+            updateCustomSelect('bluetooth_mode', msg.bluetooth_mode);
+            updateCustomSelect('tcp_freq', msg.tcp_freq);
+            updateCustomSelect('udp_freq', msg.udp_freq);
+            updateCustomSelect('usb_freq', msg.usb_freq);
+            updateCustomSelect('serial_freq', msg.serial_freq);
+            updateCustomSelect('bluetooth_freq', msg.bluetooth_freq);
+            showNotification("设备信息读取成功", 'success');
+        } else if (msg.ts === 1) // 轨道信息
+        {
+            // 清空所有现有轨道
+            const lanes = document.querySelectorAll('.lane');
+            lanes.forEach(lane => {
+                lane.innerHTML = ''; // 清空轨道内容
+            });
+
+            // 处理接收到的数据包
+            if (msg.packets && Array.isArray(msg.packets)) {
+                msg.packets.forEach((packet, laneIndex) => {
+                    // 确保轨道索引在有效范围内
+                    if (laneIndex >= lanes.length) return;
+
+                    const lane = lanes[laneIndex];
+
+                    // 处理当前轨道的每个数据项
+                    packet.forEach(item => {
+                        const { code, sensor } = item;
+
+                        // 添加芯片到轨道
+                        addChipToLane(laneIndex, code, sensor);
+                    });
+                });
+
+                showNotification("轨道配置已更新", 'success');
+            }
+        }
+        else if (msg.ts === 2) // wifi设置信息
+        {
+            document.getElementById('wifi-uuid').value = msg.uuid || '';
+            document.getElementById('wifi-password').value = msg.pass || '';
+            document.getElementById('tcp_trans_port').value = msg.tcp_port || '';
+            document.getElementById('udp_host_ip').value = msg.udp_host_ip || '';
+            document.getElementById('udp_host_port').value = msg.udp_host_port || '';
+            document.getElementById('udp_slave_port').value = msg.udp_recv_port || '';
+            showNotification("WiFi和蓝牙配置已更新", 'success');
+        }
+        else if (msg.ts === 3) // 系统信息
+        {
+            document.getElementById('imu_mac').textContent = msg.deviceid || '— —';
+            document.getElementById('ip_addr').textContent = msg.ip_addr || '— —';
+            document.getElementById('wifi_mac').textContent = msg.wifi_mac || '— —';
+            showNotification("设备信息已更新", 'success');
+        }
+        else if (msg.ts === 4)// 惯导信息防止报错
+        {}
+        else { /* 正常数据 */
+            lastTs = msg.ts;
+            lastUpdateEl.textContent = new Date(Date.now()).toLocaleString();
+            
+            // 更新刷新率
+            updateRefreshRate();
+
+            // 更新 battery
+            if (typeof msg.battery === 'number') {
+                batteryEl.textContent = msg.battery.toFixed(1) + ' %';
+            }
+            // 处理 Base64 编码的 IMU 数据
+            if (msg.data && typeof msg.data === 'string') {
+                try {
+                    // 解码 Base64 数据
+                    const binaryString = atob(msg.data);
+                    const bytes = new Uint8Array(binaryString.length);
+
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+
+                    // 使用 DataView 解析二进制数据
+                    const view = new DataView(bytes.buffer);
+                    let offset = 0;
+
+                    // 解析时间戳 (8字节)
+                    const timestamp = view.getBigUint64(offset, true); // 小端序
+                    offset += 8;
+
+                    // 解析传感器数据数组
+                    const parseSensorArray = (count, dimensions) => {
+                        const result = [];
+                        for (let s = 0; s < count; s++) {
+                            const sensorData = [];
+                            for (let d = 0; d < dimensions; d++) {
+                                sensorData.push(view.getFloat32(offset, true)); // 小端序
+                                offset += 4;
+                            }
+                            result.push(sensorData);
+                        }
+                        return result;
+                    };
+
+                    // 解析标量数组
+                    const parseScalarArray = (count) => {
+                        const result = [];
+                        for (let i = 0; i < count; i++) {
+                            result.push(view.getFloat32(offset, true));
+                            offset += 4;
+                        }
+                        return result;
+                    };
+
+                    // 解析布尔数组
+                    const parseBoolArray = (count) => {
+                        const result = [];
+                        for (let i = 0; i < count; i++) {
+                            result.push(view.getUint8(offset) !== 0);
+                            offset += 1;
+                        }
+                        return result;
+                    };
+
+                    // 解析所有 IMU 数据字段
+                    const imuData = {
+                        timestamp: Number(timestamp),
+                        raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
+                        raw_temp: parseScalarArray(BMI088_NUM + 1),
+                        quat: parseSensorArray(BMI088_NUM + 1, 4),
+                        rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
+                        eular: parseSensorArray(BMI088_NUM + 1, 3),
+                        linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                        kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
+                        displacement: parseSensorArray(BMI088_NUM + 1, 3),
+                        stationary: parseBoolArray(BMI088_NUM + 1)
+                    };
+
+                    // 将解析后的数据合并到 msg 对象
+                    Object.assign(msg, imuData);
+                } catch (error) {
+                    console.error("Base64 解码失败:", error);
+                    showNotification("IMU 数据解析错误", 'error');
+                    return;
+                }
+            }
+
+            // 更新静止状态标志
+            if (Array.isArray(msg.stationary)) {
+                msg.stationary.forEach((value, index) => {
+                    const flagElement = flagElements[index];
+                    const newColor = value ? '#24FF00':'red';
+
+                    if (stationaryFlags[index] !== value) {
+                        createAnimation(flagElement, newColor);
+                        setTimeout(() => {
+                            flagElement.style.backgroundColor = newColor;
+                        }, 100);
+                    }
+                });
+                stationaryFlags = [...msg.stationary];
+            }
+
+            // 更新时间戳显示
+            document.getElementById('tsDisplay').textContent = lastTs;
+
+            // 更新数据表格
+            DATA_GROUPS.forEach(g => {
+                const tableWraps = groupsContainer.querySelectorAll('.group');
+                const index = DATA_GROUPS.findIndex(x => x.key === g.key);
+                const tbody = tableWraps[index].querySelector('tbody');
+                let rowHtml = '';
+
+                if (g.dims === 1) {
+                    rowHtml = `<td class="ts">${lastTs}</td>` +
+                        Array.from({length: BMI088_NUM + 1}).map((_, s) => {
+                            const v = (msg[g.key] && msg[g.key][s] !== undefined) ? msg[g.key][s] : null;
+                            return `<td class="num small">${(v === null) ? '--' : fmt(v, 3)}</td>`;
+                        }).join('');
+                } else {
+                    rowHtml = `<td class="ts">${lastTs}</td>` +
+                        Array.from({length: BMI088_NUM + 1}).map((_, s) => {
+                            const arr = (msg[g.key] && msg[g.key][s]) ? msg[g.key][s] : null;
+                            if (!arr) return `<td class="num">--</td>`;
+                            const joined = Array.from({length: g.dims}).map((__, k) => fmt(arr[k], 3)).join('<br>');
+                            return `<td class="num" title="${joined}">${joined}</td>`;
+                        }).join('');
+                }
+                tbody.innerHTML = `<tr>${rowHtml}</tr>`;
+            });
+
+            // 推入缓冲区用于绘图
+            pushToBuffers(msg);
+        }
+    }
+
+    // ===== Buffers 与 uPlot 数据管理 =====
+    function pushToBuffers(msg) {
+        const ts = msg.ts || Date.now();
+        // 记录 ts
+        buffers.t.push(ts);
+        // 为一些常用序列建立缓冲，例如 raw_accel, gyro, eular, quat -> 选取部分 axis
+        // 我们把每条可绘制的“系列”用 key: `${group}_${sensor}_${axis}` 存储到 buffers
+        ['raw_accel', 'gyro', 'eular', 'quat', 'linear_accel', 'earth_accel'].forEach(group => {
+            const dims = DATA_GROUPS.find(g => g.key === group)?.dims || 1;
+            for (let s = 0; s < BMI088_NUM; s++) {
+                for (let a = 0; a < dims; a++) {
+                    const key = `${group}_${s}_${a}`;
+                    if (!buffers[key]) buffers[key] = [];
+                    const val = (msg[group] && msg[group][s] && typeof msg[group][s][a] === 'number') ? msg[group][s][a] : NaN;
+                    buffers[key].push(val);
+                }
+            }
+        });
+
+        // 保持缓冲大小（根据最大点数限制）
+        const maxPoints = 6000; // 可调整
+        if (buffers.t.length > maxPoints) {
+            const cut = buffers.t.length - maxPoints;
+            buffers.t.splice(0, cut);
+            for (const k in buffers) if (k !== 't') buffers[k].splice(0, cut);
+        }
+
+        // 更新主图数据（只显示 visibleSeries）
+        refreshMainPlot();
+    }
+    
+    // ===== uPlot 主图初始化与刷新 =====
+    function initMainPlot() {
+        const opts = {
+            width: document.getElementById('mainChart').clientWidth,
+            height: 220,
+            series: [{label: 'Time'}],
+            scales: {x: {time: false}, y: {}},
+            axes: [{}, {}],
+            hooks: {},
+            cursor: {drag: {x: false, y: false}},
+            plugins: []
+        };
+        plots.main = new uPlot(opts, [[], []], document.getElementById('mainChart'));
+
+        // 鼠标滚轮改变 timeWindowMs
+        document.getElementById('mainChart').addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY;
+            if (delta > 0) timeWindowMs = Math.min(60000000000, timeWindowMs * 1.2);
+            else timeWindowMs = Math.max(1000000, timeWindowMs / 1.2);
+            refreshMainPlot();
+        });
+    }
+
+    initMainPlot();
+
+    function refreshMainPlot() {
+        if (!plots.main) return;
+        // 根据 timeWindowMs 找到起始 index
+        const t = buffers.t || [];
+        if (t.length === 0) {
+            plots.main.setData([[]]);
+            return;
+        }
+        const tNow = t[t.length - 1];
+        const tFrom = tNow - timeWindowMs;
+        // find first index >= tFrom
+        let idx = 0;
+        while (idx < t.length && t[idx] < tFrom) idx++;
+        // const tsSlice = t.slice(idx);
+        const tsSlice = t.slice(idx).map(v => v / 1000000);
+        // 准备 series 数据
+        const seriesData = [tsSlice];
+        const seriesMeta = [{label: 'Time'}];
+        visibleSeries.forEach(s => {
+            const arr = buffers[s.key] ? buffers[s.key].slice(idx) : new Array(tsSlice.length).fill(NaN);
+            seriesData.push(arr);
+            seriesMeta.push({label: s.label});
+        });
+
+        // 更新 uPlot（如果 series 数量 changed，需要重构 uPlot，因为 uPlot 的 series 数量固定）
+        const needRecreate = plots.main.series.length !== seriesData.length;
+        if (needRecreate) {
+            const el = document.getElementById('mainChart');
+            el.innerHTML = '';
+
+            const opts = {
+                width: el.clientWidth || 600,
+                height: 220,
+                series: seriesMeta.map((s, i) => i === 0 ? {label: 'Time'} : {label: s.label, stroke: 'red', width: 1}),
+                scales: {x: {time: false}, y: {}},
+                axes: [{}, {}]
+            };
+
+            plots.main = new uPlot(opts, seriesData, el);
+        } else {
+            plots.main.setData(seriesData);
+        }
+    }
+
+    // ===== Plot 控件（添加/移除序列） =====
+    const plotTypeSel = document.getElementById('plotSelectType');
+    const plotSensorSel = document.getElementById('plotSelectSensor');
+    const plotAxisSel = document.getElementById('plotSelectAxis');
+    const addSeriesBtn = document.getElementById('addSeriesBtn');
+    const clearSeriesBtn = document.getElementById('clearSeriesBtn');
+    const seriesListEl = document.getElementById('seriesList');
+
+    // 填充下拉项
+    function initCustomSelect(selectElement, options) {
+        const trigger = selectElement.querySelector('.select-trigger');
+        const valueDisplay = selectElement.querySelector('.select-value');
+        const optionsContainer = selectElement.querySelector('.select-options');
+
+        // 清空现有选项
+        optionsContainer.innerHTML = '';
+
+        // 添加选项
+        options.forEach(option => {
+            const optionEl = document.createElement('div');
+            optionEl.className = 'select-option';
+            optionEl.textContent = option.name;
+            optionEl.dataset.value = option.key;
+
+            // 点击选项事件
+            optionEl.addEventListener('click', () => {
+                // 更新显示值
+                valueDisplay.textContent = option.name;
+
+                // 更新选中状态
+                selectElement.querySelectorAll('.select-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                optionEl.classList.add('selected');
+
+                // 关闭下拉框
+                trigger.classList.remove('active');
+                optionsContainer.classList.remove('show');
+
+                // 触发 change 事件（兼容原有逻辑）
+                const event = new Event('change', {bubbles: true});
+                selectElement.dispatchEvent(event);
+            });
+
+            optionsContainer.appendChild(optionEl);
+        });
+
+        // 点击触发器显示/隐藏选项
+        trigger.addEventListener('click', () => {
+            const isActive = trigger.classList.contains('active');
+            // 关闭所有其他下拉框
+            document.querySelectorAll('.custom-select').forEach(sel => {
+                sel.querySelector('.select-trigger').classList.remove('active');
+                sel.querySelector('.select-options').classList.remove('show');
+            });
+
+            // 切换当前下拉框状态
+            if (!isActive) {
+                trigger.classList.add('active');
+                optionsContainer.classList.add('show');
+            }
+        });
+
+        // 点击外部关闭下拉框
+        document.addEventListener('click', (e) => {
+            if (!selectElement.contains(e.target)) {
+                trigger.classList.remove('active');
+                optionsContainer.classList.remove('show');
+            }
+        });
+    }
+
+    // 获取选中值的函数（兼容原有逻辑）
+    function getSelectValue(selectElement) {
+        const selectedOption = selectElement.querySelector('.select-option.selected');
+        return selectedOption ? selectedOption.dataset.value : '';
+    }
+
+    function updateCustomSelect(selectId, value) {
+        const selectElement = document.getElementById(selectId);
+        if (!selectElement) {
+            console.warn(`未找到 ID 为 "${selectId}" 的 custom-select 元素。`);
+            return;
+        }
+        const valueDisplay = selectElement.querySelector('.select-value');
+        const optionsContainer = selectElement.querySelector('.select-options');
+        const targetValue = String(value);
+        selectElement.querySelectorAll('.select-option.selected').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+
+        let displayText = '请选择'; // 默认文本，如果找不到匹配项
+        const targetOption = optionsContainer.querySelector(`.select-option[data-value="${targetValue}"]`);
+
+        if (targetOption) {
+            targetOption.classList.add('selected');
+            displayText = targetOption.textContent; // 获取匹配项的显示文本
+        }
+        valueDisplay.textContent = displayText;
+    }
+
+    initCustomSelect(plotTypeSel, DATA_GROUPS.map(g => ({key: g.key, name: g.name})));
+    const sensorOptions = [];
+    for (let i = 0; i < BMI088_NUM; i++) {
+        sensorOptions.push({key: i.toString(), name: 'sensor' + i});
+    }
+    initCustomSelect(plotSensorSel, sensorOptions);
+    initCustomSelect(plotAxisSel, []);
+
+    function refreshAxisOptions() {
+        const sel = getSelectValue(plotTypeSel);
+        const dims = DATA_GROUPS.find(g => g.key === sel.toString())?.dims || 1;
+        const trigger = plotAxisSel.querySelector('.select-trigger');
+        const valueDisplay = plotAxisSel.querySelector('.select-value');
+        const optionsContainer = plotAxisSel.querySelector('.select-options');
+
+        const currentDisplayText = valueDisplay.textContent;
+        let valueToPreserve = null;
+        if (currentDisplayText !== '请选择') {
+            valueToPreserve = currentDisplayText;
+        }
+
+        optionsContainer.innerHTML = '';// 清空现有选项
+        let foundOldValueInNewOptions = false;
+        for (let a = 0; a < dims; a++) {
+            // 添加选项
+            const optionEl = document.createElement('div');
+            optionEl.className = 'select-option';
+            optionEl.textContent = 'axis' + a;
+            optionEl.dataset.value = a.toString();
+
+            // 点击选项事件
+            optionEl.addEventListener('click', () => {
+                valueDisplay.textContent = 'axis' + a;// 更新显示值
+                plotAxisSel.querySelectorAll('.select-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });// 更新选中状态
+                optionEl.classList.add('selected');
+
+                // 关闭下拉框
+                trigger.classList.remove('active');
+                optionsContainer.classList.remove('show');
+
+                // 触发 change 事件（兼容原有逻辑）
+                const event = new Event('change', {bubbles: true});
+                plotAxisSel.dispatchEvent(event);
+            });
+            optionsContainer.appendChild(optionEl);
+
+            if (valueToPreserve && valueToPreserve === 'axis' + a) {
+                optionEl.classList.add('selected');// 那么就选中这个新选项
+                valueDisplay.textContent = 'axis' + a;// 并且将显示文本更新为这个选项的文本（也就是保留旧值）
+                foundOldValueInNewOptions = true;// 标记为已找到，防止循环结束后被重置
+            }
+        }
+
+        if (valueToPreserve && !foundOldValueInNewOptions) { // 只有当存在需要保留的旧值，但在新选项中又没找到时，才执行重置
+            valueDisplay.textContent = '请选择';
+            // 确保所有选项都没有 selected 类（虽然循环中没加，但这里是双重保险）
+            plotAxisSel.querySelectorAll('.select-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+        }
+
+    }
+
+    plotTypeSel.addEventListener('change', refreshAxisOptions);
+    refreshAxisOptions();
+
+    function addSeries() {
+        const type = getSelectValue(plotTypeSel);
+        const s = parseInt(getSelectValue(plotSensorSel));
+        const a = parseInt(getSelectValue(plotAxisSel));
+        const key = `${type}_${s}_${a}`;
+        if (type === '') {
+            showNotification("请选择数据类型！", 'error');
+            return;
+        }
+        if (isNaN(s)) {
+            showNotification("请选择传感器序号！", 'error');
+            return;
+        }
+        if (isNaN(a)) {
+            showNotification("请选择数据轴！", 'error');
+            return;
+        }
+        if (visibleSeries.find(x => x.key === key)) {
+            showNotification("该数据已存在", 'warning');
+            return;
+        } // 已存在
+        visibleSeries.push({key, label: `${type}@s${s}#${a}`});
+        renderSeriesList();
+        refreshMainPlot();
+    }
+
+    addSeriesBtn.addEventListener('click', addSeries);
+    clearSeriesBtn.addEventListener('click', () => {
+        visibleSeries = [];
+        renderSeriesList();
+        refreshMainPlot();
+    });
+
+    function renderSeriesList() {
+        seriesListEl.innerHTML = '';
+        visibleSeries.forEach((s, idx) => {
+            const d = document.createElement('div');
+            d.style.display = 'flex';
+            d.style.justifyContent = 'space-between';
+            d.style.padding = '6px';
+            d.style.borderBottom = '1px solid rgba(0,0,0,0.04)';
+            d.innerHTML = `<div style="font-family:var(--mono)">${s.label}</div><div><button class="btn" data-idx="${idx}">移除</button></div>`;
+            seriesListEl.appendChild(d);
+        });
+        seriesListEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+            const i = parseInt(b.dataset.idx);
+            visibleSeries.splice(i, 1);
+            renderSeriesList();
+            refreshMainPlot();
+        }));
+    }
+
+    // ===== 设置页面：模式/频率 下拉填充 =====
+    const modeSelects = ['tcp_mode', 'udp_mode', 'usb_mode', 'serial_mode', 'bluetooth_mode'];
+    const freqSelects = ['tcp_freq', 'udp_freq', 'usb_freq', 'serial_freq', 'bluetooth_freq'];
+    const modes = [{v: 0, t: 'OFF'}, {v: 1, t: 'BINARY'}, {v: 2, t: 'ASCII'}];
+    const freqs = [1, 2, 5, 10, 20, 50, 100];
+    modeSelects.forEach(id => {
+        const sel = document.getElementById(id);
+        const modeSelectOptions = [];
+        modes.forEach(m => {
+            modeSelectOptions.push({key: m.v, name: m.t});
+        });
+        initCustomSelect(sel, modeSelectOptions);
+    });
+    freqSelects.forEach(id => {
+        const sel = document.getElementById(id);
+        const freqSelectOptions = [];
+        freqs.forEach(f => {
+            freqSelectOptions.push({key: f, name: f.toString()});
+        });
+        initCustomSelect(sel, freqSelectOptions);
+    });
+
+    // ===== 包轨道拖拽构建 =====
+    const paletteEl = document.getElementById('palette');
+
+    function buildPalette() {
+        // data_type_t 列表
+        DATA_GROUPS.forEach((g, idx) => {
+            const it = document.createElement('div');
+            it.className = 'item';
+            it.draggable = true;
+            it.dataset.type = g.key;
+            it.dataset.dims = g.dims;
+            it.textContent = g.name;
+            paletteEl.appendChild(it);
+        });
+        // 额外：TIMESTAMP、BATTERY
+        const tsItem = document.createElement('div');
+        tsItem.className = 'item';
+        tsItem.draggable = true;
+        tsItem.dataset.type = 'timestamp';
+        tsItem.dataset.dims = "1";
+        tsItem.textContent = 'timestamp';
+        paletteEl.prepend(tsItem);
+        // const dtCnt = document.createElement('div'); dtCnt.className='item'; dtCnt.draggable=true; dtCnt.dataset.type='DATA_TYPE_CNT'; dtCnt.dataset.dims="1"; dtCnt.textContent='DATA_TYPE_CNT'; paletteEl.appendChild(dtCnt);
+        const dtCnt = document.createElement('div');
+        dtCnt.className='item';
+        dtCnt.draggable=true;
+        dtCnt.dataset.type='battery';
+        dtCnt.dataset.dims="1";
+        dtCnt.textContent='电池电量';
+        paletteEl.appendChild(dtCnt);
+    }
+
+    buildPalette();
+
+    // 处理拖拽到车道
+    const lanes = Array.from(document.querySelectorAll('.lane'));
+    paletteEl.querySelectorAll('.item').forEach(it => {
+        it.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('application/x-my-palette-item', JSON.stringify({type: it.dataset.type}));
+        });
+    });
+    lanes.forEach(l => {
+        l.addEventListener('dragover', e => {
+            e.preventDefault();
+            l.style.outline = '2px dashed var(--accent)';
+        });
+        l.addEventListener('dragleave', e => {
+            l.style.outline = 'none';
+        });
+        l.addEventListener('drop', e => {
+            e.preventDefault();
+            l.style.outline = 'none';
+            
+            // 处理从调色板拖拽的新芯片
+            if (e.dataTransfer.types.includes('application/x-my-palette-item')) {
+                try {
+                    const data = JSON.parse(e.dataTransfer.getData('application/x-my-palette-item'));
+                    addChipToLane(l.dataset.lane, data.type);
+                } catch (ex) {
+                    console.warn('drop parse err', ex);
+                }
+            }
+            // 处理跨轨道拖拽芯片
+            else if (e.dataTransfer.types.includes('application/x-lane-reorder')) {
+                try {
+                    const data = JSON.parse(e.dataTransfer.getData('application/x-lane-reorder'));
+                    const draggingChip = document.querySelector('.dragging');
+                    
+                    if (draggingChip && data.laneIdx !== l.dataset.lane) {
+                        // 跨轨道移动
+                        const oldSensorId = draggingChip.dataset.sensorId;
+                        const oldType = draggingChip.dataset.type;
+                        draggingChip.remove();
+                        addChipToLane(l.dataset.lane, oldType, oldSensorId);
+                    }
+                } catch (ex) {
+                    console.warn('cross-lane drop error', ex);
+                }
+            }
+        });
+    });
+
+    function addChipToLane(laneIdx, type, sensorId = 0) {
+        const lane = document.getElementById('lane' + laneIdx);
+        const chip = document.createElement('div');
+        chip.className = 'slot';
+        chip.draggable = true;
+        
+        // 存储数据用于拖拽
+        chip.dataset.type = type;
+        chip.dataset.sensorId = sensorId;
+        
+        // chip 内显示 type + sensorSel + 删除
+        chip.innerHTML = `<div style="display:flex;gap:6px;align-items:center"><div style="font-family:var(--mono)">${type}</div></div>`;
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.gap = '6px';
+        right.style.marginLeft = '6px';
+        if (type !== 'timestamp' && type !== 'battery') {
+            const sensorSel = document.createElement('select');
+            for (let i = 0; i < BMI088_NUM; i++) {
+                const o = document.createElement('option');
+                o.value = i.toString();
+                o.textContent = 's' + i;
+                sensorSel.appendChild(o);
+            }
+            const o = document.createElement('option');
+            o.value = '4';
+            o.textContent = 'avg';
+            sensorSel.appendChild(o);
+            sensorSel.value = sensorId.toString();
+            
+            // 更新数据集
+            sensorSel.addEventListener('change', () => {
+                chip.dataset.sensorId = sensorSel.value;
+            });
+            
+            right.appendChild(sensorSel);
+        }
+
+
+        const del = document.createElement('button');
+        del.className = 'btn';
+        del.textContent = '×';
+        del.style.padding = '4px 6px';
+        del.addEventListener('click', () => {
+            chip.remove();
+        });
+        right.appendChild(del);
+        chip.appendChild(right);
+        
+        // 添加拖拽事件
+        chip.addEventListener('dragstart', (e) => {
+            chip.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('application/x-lane-reorder', JSON.stringify({
+                type: chip.dataset.type,
+                sensorId: chip.dataset.sensorId,
+                laneIdx: laneIdx
+            }));
+        });
+        
+        chip.addEventListener('dragend', () => {
+            chip.classList.remove('dragging');
+        });
+        
+        chip.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const dragData = e.dataTransfer.types.includes('application/x-lane-reorder');
+            if (dragData) {
+                chip.classList.add('drag-over');
+            }
+        });
+        
+        chip.addEventListener('dragleave', () => {
+            chip.classList.remove('drag-over');
+        });
+        
+        chip.addEventListener('drop', (e) => {
+            e.preventDefault();
+            chip.classList.remove('drag-over');
+            
+            // 处理轨道内拖拽重排
+            if (e.dataTransfer.types.includes('application/x-lane-reorder')) {
+                e.stopPropagation(); // 阻止事件冒泡到轨道
+                try {
+                    const data = JSON.parse(e.dataTransfer.getData('application/x-lane-reorder'));
+                    const draggingChip = document.querySelector('.dragging');
+                    
+                    if (draggingChip && draggingChip !== chip) {
+                        // 如果是跨轨道拖拽
+                        if (data.laneIdx !== laneIdx) {
+                            // 移除原芯片，在新轨道中创建
+                            const oldSensorId = draggingChip.dataset.sensorId;
+                            const oldType = draggingChip.dataset.type;
+                            draggingChip.remove();
+                            
+                            // 在目标位置之前插入
+                            const tempChip = chip;
+                            addChipToLane(laneIdx, oldType, oldSensorId);
+                            const newChip = lane.lastChild;
+                            lane.insertBefore(newChip, tempChip);
+                        } else {
+                            // 同一轨道内交换位置
+                            const allChips = Array.from(lane.children);
+                            const dragIndex = allChips.indexOf(draggingChip);
+                            const dropIndex = allChips.indexOf(chip);
+                            
+                            if (dragIndex < dropIndex) {
+                                lane.insertBefore(draggingChip, chip.nextSibling);
+                            } else {
+                                lane.insertBefore(draggingChip, chip);
+                            }
+                        }
+                    }
+                } catch (ex) {
+                    console.warn('lane chip drop error', ex);
+                }
+            }
+        });
+        
+        lane.appendChild(chip);
+    }
+
+    // 读取包配置
+    document.getElementById('resetPacketsBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        ws.send(JSON.stringify({cmd: 'getPacketList'}));
+        showNotification("正在获取数据包消息列表");
+    });
+    // 清空轨道
+    document.getElementById('clearLanesBtn').addEventListener('click', () => {
+        lanes.forEach(l => l.innerHTML = '');
+    });
+
+    // 发送包配置（将轨道内容编码成 uint8_t packet_lst 的二维数组形式并通过 ws 发送）
+    document.getElementById('sendPacketsBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        const packets = [];
+        for (let i = 0; i < 5; i++) {
+            const lane = document.getElementById('lane' + i);
+            const items = Array.from(lane.querySelectorAll('.slot'));
+            if (items.length === 0) {
+                packets.push([{code: 'data_type_cnt'}]);
+                continue;
+            }
+            const arr = [];
+            // 强制以 TIMESTAMP 开头与 DATA_TYPE_CNT 结尾，如果不满足则自动补齐
+            // 用户可以排除 TIMESTAMP，但固件要求以 TIMESTAMP 开头，我们这里自动补 timestamp
+            // arr.push({code: 'TIMESTAMP', sensor: 0});
+            items.forEach(ch => {
+                const type = ch.querySelector('div').textContent.trim();
+                const sel = ch.querySelector('select');
+                if (sel === null) {
+                    console.log("null");
+                    arr.push({code: type, sensor: 1});
+                } else {
+                    const sensor = parseInt(ch.querySelector('select').value);
+                    console.log(sensor);
+                    arr.push({code: type, sensor});
+                }
+            });
+            arr.push({code: 'data_type_cnt', sensor: 0});
+            packets.push(arr);
+        }
+        // 将 packets 序列化为我们约定的 JSON 格式
+        const payload = {cmd: 'set_packet_list', packets};
+        // console.log(JSON.stringify(payload));
+        ws.send(JSON.stringify(payload));
+        showNotification('已发送包配置到设备', 'success');
+    });
+    // 读取设备设置
+    document.getElementById('resetModeBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        ws.send(JSON.stringify({cmd: 'getSettings'}));
+        showNotification("正在获取设备信息");
+    });
+    // 发送传输设置
+    document.getElementById('sendModeBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        const obj = {};
+        modeSelects.forEach(id => {
+            obj[id] = parseInt(getSelectValue(document.getElementById(id)))
+        });
+        freqSelects.forEach(id => {
+            obj[id] = parseInt(getSelectValue(document.getElementById(id)))
+        });
+        ws.send(JSON.stringify({cmd: 'set_transmit_settings', settings: obj}));
+        console.log(JSON.stringify({cmd: 'set_transmit_settings', settings: obj}));
+        showNotification('已发送传输设置', 'success');
+    });
+
+    const passwordInput = document.getElementById('wifi-password');
+    const togglePassword = document.getElementById('toggle-password');
+    // 鼠标按下时显示密码
+    togglePassword.addEventListener('mousedown', function() {
+        passwordInput.type = 'text';
+    });
+    // 鼠标释放时隐藏密码
+    togglePassword.addEventListener('mouseup', function() {
+        passwordInput.type = 'password';
+    });
+    // 防止拖动时一直显示密码
+    togglePassword.addEventListener('mouseleave', function() {
+        passwordInput.type = 'password';
+    });
+    // 防止在移动设备上的触摸事件导致问题
+    togglePassword.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        passwordInput.type = 'text';
+    });
+    togglePassword.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        passwordInput.type = 'password';
+    });
+    // 读取设备设置
+    document.getElementById('resetConnectionSettingBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        ws.send(JSON.stringify({cmd: 'getConnSettings'}));
+        showNotification("正在获取设备信息");
+    });
+    // 发送传输设置
+    document.getElementById('sendConnectionSettingBtn').addEventListener('click', () => {
+        if (!ws || !connected) {
+            showNotification('请连接设备', 'error');
+            return;
+        }
+        // 从表单获取值
+        const uuid = document.getElementById('wifi-uuid');
+        const pass = document.getElementById('wifi-password');
+        const tcpPort = document.getElementById('tcp_trans_port');
+        const udpHostIp = document.getElementById('udp_host_ip');
+        const udpHostPort = document.getElementById('udp_host_port');
+        const udpRecvPort = document.getElementById('udp_slave_port');
+
+        // 简单验证
+        if (!uuid.validity.valid) {
+            showNotification('WiFi名称是否合法', 'error');
+            return;
+        }
+
+        if (!tcpPort.validity.valid) {
+            showNotification('TCP端口是否合法', 'error');
+            return;
+        }
+        if (!udpHostIp.validity.valid) {
+            showNotification('UDP主机ip地址是否合法', 'error');
+            return;
+        }
+        if (!udpHostPort.validity.valid) {
+            showNotification('UDP主机端口是否合法', 'error');
+            return;
+        }
+        if (!udpRecvPort.validity.valid) {
+            showNotification('UDP从机端口是否合法', 'error');
+            return;
+        }
+
+        // 构建设置对象
+        const obj = {
+            uuid: uuid.value.trim(),
+            pass: pass.value.trim(),
+            tcp_port: tcpPort.value.trim(),
+            udp_host_ip: udpHostIp.value.trim(),
+            udp_host_port: udpHostPort.value.trim(),
+            udp_recv_port: udpRecvPort.value.trim()
+        };
+
+        // 发送到服务器
+        try {
+            const message = JSON.stringify({
+                cmd: 'setConnSettings',
+                settings: obj
+            });
+            ws.send(message);
+            console.log('发送连接设置:', message);
+            showNotification('已发送传输设置', 'success');
+        } catch (error) {
+            console.error('发送失败:', error);
+            showNotification('发送失败，请重试', 'error');
+        }
+    });
+
+
+
+
+    // ===== 初始化一些交互 =====
+    // 填充默认轨道示例
+    addChipToLane(0, 'raw_accel');
+    addChipToLane(0, 'raw_gyro');
+    addChipToLane(1, 'quat');
+    addChipToLane(1, 'eular');
+    addChipToLane(2, 'battery');
+
+    // 页面切换：把主图/数据视图隐藏类名控制
+    (function () {
+        const views = {
+            dataView: document.getElementById('dataView'),
+            plotView: document.getElementById('plotView'),
+            settingsView: document.getElementById('settingsView')
+        };
+        document.querySelectorAll('aside .nav button').forEach(b => {
+            b.addEventListener('click', () => {
+                Object.values(views).forEach(v => v.classList.add('hidden'));
+                views[b.dataset.view].classList.remove('hidden');
+            });
+        });
+    })();
+
+    // 弹窗提示函数
+    function showNotification(message, type = 'info') {
+        const container = document.getElementById('notificationContainer');
+
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+
+        // 添加到容器
+        container.appendChild(notification);
+
+        // 触发动画
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+
+        // 自动关闭
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                container.removeChild(notification);
+            }, 400);
+        }, 3000);
+    }
+
+    // ===== 连接状态显示 helper =====
+    function updateConnUI() {
+        if (connected && (Date.now() - last_receive_time > 2000))
+        {
+            ws.close();
+            connected = false;
+        } // 检查WebSocket连接状态
+        connDot.classList.toggle('connect', connected);
+        connDot.classList.toggle('off', !connected);
+        connStatus.textContent = connected ? '已连接' : '未连接';
+
+    }
+
+    setInterval(updateConnUI, 600);
+
+</script>
+
+</body>
+</html>

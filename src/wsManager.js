@@ -182,7 +182,6 @@ class WSManager extends EventEmitter {
                         timestamp: Number(timestamp),
                         raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
                         raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
-                        raw_mag: parseSensorArray(BMI088_NUM + 1, 3),
                         raw_temp: parseScalarArray(BMI088_NUM + 1),
                         quat: parseSensorArray(BMI088_NUM + 1, 4),
                         rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
@@ -190,8 +189,7 @@ class WSManager extends EventEmitter {
                         linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
                         earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
                         kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        raw_velocity: parseSensorArray(BMI088_NUM + 1, 3),
-                        fixed_velocity: parseSensorArray(BMI088_NUM + 1, 3),
+                        kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
                         displacement: parseSensorArray(BMI088_NUM + 1, 3),
                         stationary: parseBoolArray(BMI088_NUM + 1)
                       };

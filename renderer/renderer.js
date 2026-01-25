@@ -88,6 +88,31 @@ let drawGrid = null;
 let modalContent = null;
 let hostIp = null;
 let scanAbortRequested = false;
+let currentPage = 'attitude'; // 'attitude', 'track', or device IP
+
+// IMU sensor configuration
+const BMI088_NUM = 4; // 0..3 actual sensors, 4 is combined/average
+
+// Performance optimization constants
+const MAX_TRACK_POINTS = 5000; // Maximum points per track to prevent memory issues
+const DRAW_THROTTLE_MS = 50; // Throttle canvas redraw
+const LEGEND_THROTTLE_MS = 500; // Throttle legend updates
+
+// Throttle helper
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// Throttled versions of expensive functions
+let throttledDrawTracks = null;
+let throttledUpdateLegend = null;
 
 // Color map
 const COLORS = {
@@ -96,6 +121,25 @@ const COLORS = {
   green: '#00FF00',
   black: '#444444'
 };
+
+// ---------------- Tab Slider Animation ----------------
+function updateTabSlider() {
+  const container = document.querySelector('.tab-container');
+  const slider = document.querySelector('.tab-slider');
+  const activeTab = document.querySelector('.page-tab.active');
+  
+  if (!container || !slider || !activeTab) return;
+  
+  const containerRect = container.getBoundingClientRect();
+  const tabRect = activeTab.getBoundingClientRect();
+  
+  slider.style.left = (tabRect.left - containerRect.left) + 'px';
+  slider.style.width = tabRect.width + 'px';
+}
+
+// Initialize tab slider
+setTimeout(updateTabSlider, 100);
+window.addEventListener('resize', updateTabSlider);
 
 // ---------------- Notification helper ----------------
 function showNotification(message, type = 'info') {
@@ -147,10 +191,216 @@ document.getElementById('btn-scan-ips').addEventListener('click', async () => {
 });
 
 // other topbar buttons (unchanged behaviour)
-document.getElementById('btn-disconnect').addEventListener('click', () => {
-  // show list and allow disconnect - TODO (kept as stub to not change other logic)
-  alert('断开连接功能待实现');
+document.getElementById('btn-disconnect').addEventListener('click', async () => {
+  // Show disconnect modal with device list
+  if (connections.length === 0) {
+    showNotification('没有已连接的设备', 'warning');
+    return;
+  }
+  showDisconnectModal();
 });
+
+function showDisconnectModal() {
+  const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0">断开设备连接</h3>
+      <button id="closeDisconnectX" style="background:transparent;color:#666;padding:4px 8px" title="关闭">×</button>
+    </div>
+    <div id="device-list" style="max-height:300px;overflow-y:auto">
+      ${connections.map(conn => `
+        <div class="device-disconnect-item" data-ip="${conn.ip}" style="display:flex;align-items:center;justify-content:space-between;padding:12px;margin-bottom:8px;background:#f5f7fb;border-radius:8px;cursor:pointer;transition:all 0.2s">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:10px;height:10px;background:#22c55e;border-radius:50%"></div>
+            <span style="font-weight:500">${conn.ip}</span>
+          </div>
+          <button class="disconnect-single danger" data-ip="${conn.ip}" style="padding:6px 12px;font-size:12px">断开</button>
+        </div>
+      `).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button id="disconnect-all" class="danger" style="flex:1">断开所有设备</button>
+      <button id="close-disconnect" class="secondary" style="flex:1">取消</button>
+    </div>
+  `;
+  showModal(html);
+  
+  // Close button
+  modalContent.querySelector('#closeDisconnectX').addEventListener('click', hideModal);
+  modalContent.querySelector('#close-disconnect').addEventListener('click', hideModal);
+  
+  // Disconnect single device
+  modalContent.querySelectorAll('.disconnect-single').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ip = btn.dataset.ip;
+      await disconnectDevice(ip);
+      // Refresh modal
+      if (connections.length > 0) {
+        showDisconnectModal();
+      } else {
+        hideModal();
+      }
+    });
+  });
+  
+  // Disconnect all
+  modalContent.querySelector('#disconnect-all').addEventListener('click', async () => {
+    const ips = [...connections.map(c => c.ip)];
+    for (const ip of ips) {
+      await disconnectDevice(ip);
+    }
+    hideModal();
+    showNotification('已断开所有设备', 'success');
+  });
+}
+
+async function disconnectDevice(ip) {
+  try {
+    await electronAPI.disconnectWS({ ip });
+    
+    // Remove from connections array
+    const idx = connections.findIndex(c => c.ip === ip);
+    if (idx >= 0) {
+      connections.splice(idx, 1);
+    }
+    
+    // Remove from tracks
+    if (tracks[ip]) {
+      delete tracks[ip];
+      delete trackColors[ip];
+      delete trackVisible[ip];
+      usedColors.delete(trackColors[ip]);
+      if (throttledUpdateLegend) throttledUpdateLegend();
+      if (typeof window.drawTracks === 'function') window.drawTracks();
+    }
+    
+    // Remove device tab
+    const deviceTab = document.querySelector(`.device-tab[data-ip="${ip}"]`);
+    if (deviceTab) {
+      deviceTab.remove();
+    }
+    
+    // Remove device page (iframe)
+    removeDevicePage(ip);
+    
+    // If current page is this device, switch to attitude
+    if (currentPage === ip) {
+      switchToPage('attitude');
+    }
+    
+    // Update connection count
+    updateConnectionCount();
+    
+    // Rebuild grid
+    layoutGrid(true);
+    
+    showNotification(`已断开 ${ip}`, 'success');
+  } catch (e) {
+    console.error('Disconnect error:', e);
+    showNotification(`断开 ${ip} 失败`, 'error');
+  }
+}
+
+function updateConnectionCount() {
+  const countEl = document.getElementById('connection-count');
+  if (countEl) {
+    countEl.textContent = `${connections.length} 台设备`;
+  }
+}
+
+function switchToPage(page) {
+  currentPage = page;
+  
+  // Update page-tab active states
+  document.querySelectorAll('.page-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.page === page);
+  });
+  
+  // Update device-tab active states
+  document.querySelectorAll('.device-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.ip === page);
+  });
+  
+  // Show/hide pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.device-page').forEach(p => p.classList.remove('active'));
+  
+  if (page === 'attitude') {
+    document.getElementById('page-device-attitude').classList.add('active');
+  } else if (page === 'track') {
+    document.getElementById('page-device-track').classList.add('active');
+  } else {
+    // Device-specific page - show imupage iframe
+    showDevicePage(page);
+  }
+  
+  updateTabSlider();
+  if (page === 'attitude') {
+    layoutGrid(true);
+  }
+}
+
+// Create and show device detail page with embedded imupage
+function showDevicePage(ip) {
+  const container = document.getElementById('device-pages-container');
+  if (!container) return;
+  
+  // Check if page already exists
+  let devicePage = container.querySelector(`[data-device-ip="${ip}"]`);
+  
+  if (!devicePage) {
+    // Create new device page
+    devicePage = document.createElement('div');
+    devicePage.className = 'device-page';
+    devicePage.dataset.deviceIp = ip;
+    devicePage.innerHTML = `
+      <div class="device-page-header">
+        <div class="device-page-title">
+          <h3>设备详情 - ${ip}</h3>
+          <span class="device-status">已连接</span>
+        </div>
+        <div class="device-page-actions">
+          <button class="btn-open-external" title="在浏览器中打开">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </button>
+          <button class="btn-back secondary">返回姿态页</button>
+        </div>
+      </div>
+      <div class="device-page-content">
+        <iframe class="device-iframe" src="http://${ip}/" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+      </div>
+    `;
+    
+    // Add event listeners
+    devicePage.querySelector('.btn-back').addEventListener('click', () => {
+      switchToPage('attitude');
+    });
+    
+    devicePage.querySelector('.btn-open-external').addEventListener('click', () => {
+      electronAPI.openUrl(`http://${ip}/`);
+    });
+    
+    container.appendChild(devicePage);
+  }
+  
+  // Show this device page
+  devicePage.classList.add('active');
+}
+
+// Remove device page when disconnecting
+function removeDevicePage(ip) {
+  const container = document.getElementById('device-pages-container');
+  if (!container) return;
+  
+  const devicePage = container.querySelector(`[data-device-ip="${ip}"]`);
+  if (devicePage) {
+    devicePage.remove();
+  }
+}
 
 document.getElementById('btn-record').addEventListener('click', () => {
   recording = !recording;
@@ -174,15 +424,12 @@ document.getElementById('btn-shutdown').addEventListener('click', () => {
   }
 
 });
-document.querySelectorAll('.page-switch').forEach(btn => {
+
+// Page tab switching with animation
+document.querySelectorAll('.page-tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.page-switch').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
     const page = btn.dataset.page;
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    if (page === 'attitude') document.getElementById('page-device-attitude').classList.add('active');
-    else document.getElementById('page-device-track').classList.add('active');
-    layoutGrid(true);
+    switchToPage(page);
   });
 });
 
@@ -231,26 +478,148 @@ electronAPI.onWSMessage((msg) => {
     // push if not present
     connections.push({ ip: msg.ip, lastMsg: msg.msg, connSettings: msg.connSettings || null });
     isNew = true;
+    // Add device tab for new connection
+    addDeviceTab(msg.ip);
+    updateConnectionCount();
   }
   // if IMU normal data, push to connection and will be used for attitude rendering
   // update grid
   layoutGrid(isNew);
   let ip = msg.ip;
-  msg = msg.msg;
-  if (msg.positions) {
-    if (!tracks[ip]) {
-      tracks[ip] = [];
-      trackColors[ip] = getUniqueRandomColor(ip);
-      trackVisible[ip] = true;
-      updateLegend();
+  let data = msg.msg;
+
+  
+  // Process Base64 encoded IMU data (similar to imupage.html)
+  if (data && data.data && typeof data.data === 'string') {
+    try {
+      // Decode Base64 data
+      const binaryString = atob(data.data);
+      const bytes = new Uint8Array(binaryString.length);
+
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Parse binary data using DataView
+      const view = new DataView(bytes.buffer);
+      let offset = 0;
+
+      // Parse timestamp (8 bytes)
+      const timestamp = view.getBigUint64(offset, true); // Little-endian
+      offset += 8;
+
+      // Helper: Parse sensor array
+      const parseSensorArray = (count, dimensions) => {
+        const result = [];
+        for (let s = 0; s < count; s++) {
+          const sensorData = [];
+          for (let d = 0; d < dimensions; d++) {
+            sensorData.push(view.getFloat32(offset, true)); // Little-endian
+            offset += 4;
+          }
+          result.push(sensorData);
+        }
+        return result;
+      };
+
+      // Helper: Parse scalar array
+      const parseScalarArray = (count) => {
+        const result = [];
+        for (let i = 0; i < count; i++) {
+          result.push(view.getFloat32(offset, true));
+          offset += 4;
+        }
+        return result;
+      };
+
+      // Helper: Parse boolean array
+      const parseBoolArray = (count) => {
+        const result = [];
+        for (let i = 0; i < count; i++) {
+          result.push(view.getUint8(offset) !== 0);
+          offset += 1;
+        }
+        return result;
+      };
+
+      // Parse all IMU data fields
+      const imuData = {
+        timestamp: Number(timestamp),
+        raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
+        raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
+        raw_temp: parseScalarArray(BMI088_NUM + 1),
+        quat: parseSensorArray(BMI088_NUM + 1, 4),
+        rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
+        eular: parseSensorArray(BMI088_NUM + 1, 3),
+        linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
+        earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
+        kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
+        kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
+        displacement: parseSensorArray(BMI088_NUM + 1, 3),
+        stationary: parseBoolArray(BMI088_NUM + 1)
+      };
+
+      // Merge parsed data into data object
+      Object.assign(data, imuData);
+    } catch (error) {
+      console.error("Base64 decoding failed:", error);
+      return;
     }
-    msg.positions.forEach(pos => {
-      tracks[ip].push({ x: pos[0], y: pos[1], t: Date.now() }); // ignore z, use current time
-    });
-    if (typeof window.drawTracks === 'function') window.drawTracks();
-    updateLegend(); // update position
   }
+  
+  // Use displacement[0][0:2] (first sensor's x and y) for track data
+  // This follows the imupage.html logic where displacement is parsed from Base64 data
+  if (data.displacement && Array.isArray(data.displacement) && data.displacement[0]) {
+    const displacement = data.displacement[0]; // First sensor
+    const x = displacement[0]; // x coordinate
+    const y = displacement[1]; // y coordinate
+    
+    if (typeof x === 'number' && typeof y === 'number' && !isNaN(x) && !isNaN(y)) {
+      if (!tracks[ip]) {
+        tracks[ip] = [];
+        trackColors[ip] = getUniqueRandomColor(ip);
+        trackVisible[ip] = true;
+        if (throttledUpdateLegend) throttledUpdateLegend();
+      }
+      tracks[ip].push({ x, y, t: Date.now() });
+      // Limit track array size to prevent memory issues
+      if (tracks[ip].length > MAX_TRACK_POINTS) {
+        tracks[ip] = tracks[ip].slice(-MAX_TRACK_POINTS);
+      }
+      if (throttledDrawTracks) throttledDrawTracks();
+    }
+  }
+  
 });
+
+// Add device tab to bottom bar
+function addDeviceTab(ip) {
+  const deviceTabs = document.getElementById('device-tabs');
+  if (!deviceTabs) return;
+  
+  // Check if tab already exists
+  if (deviceTabs.querySelector(`[data-ip="${ip}"]`)) return;
+  
+  const tab = document.createElement('button');
+  tab.className = 'device-tab animate-slide-in';
+  tab.dataset.ip = ip;
+  tab.innerHTML = `
+    <span class="status-dot"></span>
+    <span>${ip}</span>
+    <span class="close-btn" title="断开连接">×</span>
+  `;
+  
+  tab.addEventListener('click', (e) => {
+    if (e.target.classList.contains('close-btn')) {
+      e.stopPropagation();
+      disconnectDevice(ip);
+      return;
+    }
+    switchToPage(ip);
+  });
+  
+  deviceTabs.appendChild(tab);
+}
 
 // ---------------- connection / render grid ----------------
 let oldLength = 0;
@@ -505,6 +874,8 @@ function showModalScanIPs(ips, subnet) {
   };
   const gridCont = modalContent.querySelector('#gridContainer');
   const tooltip = modalContent.querySelector('#tooltip');
+  const modalCard = modalContent; // Reference to modal card for position calculation
+  
   scanState.cells.forEach((cell, i) => {
     const div = document.createElement('div');
     div.style.background = cell.color;
@@ -512,11 +883,19 @@ function showModalScanIPs(ips, subnet) {
     div.addEventListener('mouseenter', (e) => {
       tooltip.textContent = `IP: ${ips[i]}`;
       tooltip.style.display = 'block';
+      // Position tooltip relative to the hovered element
+      const rect = div.getBoundingClientRect();
+      const modalRect = modalCard.getBoundingClientRect();
+      tooltip.style.left = `${rect.left - modalRect.left + rect.width + 5}px`;
+      tooltip.style.top = `${rect.top - modalRect.top}px`;
     });
 
     div.addEventListener('mousemove', (e) => {
-      tooltip.style.left = `${e.pageX + 10}px`;
-      tooltip.style.top = `${e.pageY - 20}px`;
+      // Update position on move for smoother experience
+      const rect = div.getBoundingClientRect();
+      const modalRect = modalCard.getBoundingClientRect();
+      tooltip.style.left = `${rect.left - modalRect.left + rect.width + 5}px`;
+      tooltip.style.top = `${rect.top - modalRect.top}px`;
     });
 
     div.addEventListener('mouseleave', () => {
@@ -689,6 +1068,9 @@ function getUniqueRandomColor(ip) {
   return color;
 }
 
+// Track canvas state (global for replay/fit functions)
+let trackOffsetX = 0, trackOffsetY = 0, trackScale = 50;
+
 // track canvas setup unchanged, except exposure of drawTracks
 (function setupTrackCanvas() {
   const canvas = document.getElementById('track-canvas');
@@ -696,20 +1078,19 @@ function getUniqueRandomColor(ip) {
   const ctx = canvas.getContext('2d');
   function fit() { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; drawTracks(); }
   window.addEventListener('resize', fit);
-  let offsetX = 0, offsetY = 0, scale = 50;
   let dragging = false, last = [0, 0];
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left - canvas.clientWidth / 2;
     const mouseY = e.clientY - rect.top - canvas.clientHeight / 2;
-    const worldXBefore = (mouseX - offsetX) / scale;
-    const worldYBefore = -(mouseY - offsetY) / scale; // y inverted
+    const worldXBefore = (mouseX - trackOffsetX) / trackScale;
+    const worldYBefore = -(mouseY - trackOffsetY) / trackScale; // y inverted
     const factor = Math.exp(-e.deltaY * 0.0008);
-    let newScale = Math.max(0.1, Math.min(800, scale * factor));
-    scale = newScale;
-    offsetX = mouseX - worldXBefore * scale;
-    offsetY = mouseY + worldYBefore * scale;
+    let newScale = Math.max(0.1, Math.min(800, trackScale * factor));
+    trackScale = newScale;
+    trackOffsetX = mouseX - worldXBefore * trackScale;
+    trackOffsetY = mouseY + worldYBefore * trackScale;
     drawTracks();
   });
   canvas.addEventListener('mousedown', (e) => { dragging = true; last = [e.clientX, e.clientY]; });
@@ -718,8 +1099,8 @@ function getUniqueRandomColor(ip) {
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    if (!dragging) return; offsetX += (e.clientX - last[0]); 
-    offsetY += (e.clientY - last[1]); last = [e.clientX, e.clientY]; 
+    if (!dragging) return; trackOffsetX += (e.clientX - last[0]); 
+    trackOffsetY += (e.clientY - last[1]); last = [e.clientX, e.clientY]; 
     drawTracks();
   });
 
@@ -745,11 +1126,11 @@ function getUniqueRandomColor(ip) {
     ctx.lineWidth = 1;
     ctx.beginPath();
     // Horizontal axis
-    ctx.moveTo(0, canvas.height / 2 + offsetY);
-    ctx.lineTo(canvas.width, canvas.height / 2 + offsetY);
+    ctx.moveTo(0, canvas.height / 2 + trackOffsetY);
+    ctx.lineTo(canvas.width, canvas.height / 2 + trackOffsetY);
     // Vertical axis
-    ctx.moveTo(canvas.width / 2 + offsetX, 0);
-    ctx.lineTo(canvas.width / 2 + offsetX, canvas.height);
+    ctx.moveTo(canvas.width / 2 + trackOffsetX, 0);
+    ctx.lineTo(canvas.width / 2 + trackOffsetX, canvas.height);
     ctx.stroke();
 
     // Draw ticks and labels
@@ -759,16 +1140,16 @@ function getUniqueRandomColor(ip) {
     ctx.textBaseline = 'middle';
 
     // Determine tick interval based on scale
-    let tickInterval = niceStep(scale);
+    let tickInterval = niceStep(trackScale);
     
     // X axis ticks
-    const centerX = canvas.width / 2 + offsetX;
-    const centerY = canvas.height / 2 + offsetY;
-    const minX = -(canvas.width / 2  + offsetX) / scale;
-    const maxX = (canvas.width / 2 - offsetX) / scale;
+    const centerX = canvas.width / 2 + trackOffsetX;
+    const centerY = canvas.height / 2 + trackOffsetY;
+    const minX = -(canvas.width / 2  + trackOffsetX) / trackScale;
+    const maxX = (canvas.width / 2 - trackOffsetX) / trackScale;
     
     for (let x = Math.ceil(minX / tickInterval) * tickInterval; x <= maxX; x += tickInterval) {
-      const px = centerX + x * scale;
+      const px = centerX + x * trackScale;
       ctx.beginPath();
       ctx.moveTo(px, centerY - 5);
       ctx.lineTo(px, centerY + 5);
@@ -777,10 +1158,10 @@ function getUniqueRandomColor(ip) {
     }
 
     // Y axis ticks (inverted)
-    const minY = (offsetY - canvas.height / 2) / scale;
-    const maxY = (offsetY  + canvas.height / 2) / scale;
+    const minY = (trackOffsetY - canvas.height / 2) / trackScale;
+    const maxY = (trackOffsetY  + canvas.height / 2) / trackScale;
     for (let y = Math.ceil(minY / tickInterval) * tickInterval; y <= maxY; y += tickInterval) {
-      const py = centerY - y * scale; // inverted
+      const py = centerY - y * trackScale; // inverted
       ctx.beginPath();
       ctx.moveTo(centerX - 5, py);
       ctx.lineTo(centerX + 5, py);
@@ -794,15 +1175,15 @@ function getUniqueRandomColor(ip) {
       const pts = tracks[ip];
       ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[ip] || 'black';
       for (let i = 0; i < pts.length; i++) {
-        const px = centerX + pts[i].x * scale;
-        const py = centerY - pts[i].y * scale; // inverted y
+        const px = centerX + pts[i].x * trackScale;
+        const py = centerY - pts[i].y * trackScale; // inverted y
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.stroke();
       const lastp = pts[pts.length - 1]; if (lastp) {
         ctx.fillStyle = trackColors[ip] || 'black';
         ctx.beginPath();
-        ctx.arc(centerX + lastp.x * scale, centerY - lastp.y * scale, 4, 0, Math.PI * 2);
+        ctx.arc(centerX + lastp.x * trackScale, centerY - lastp.y * trackScale, 4, 0, Math.PI * 2);
         ctx.fill();
       }
     });
@@ -811,6 +1192,10 @@ function getUniqueRandomColor(ip) {
 
   fit();
 })();
+
+// Initialize throttled functions after all functions are defined
+throttledDrawTracks = throttle(function() { if (typeof window.drawTracks === 'function') window.drawTracks(); }, DRAW_THROTTLE_MS);
+throttledUpdateLegend = throttle(updateLegend, LEGEND_THROTTLE_MS);
 
 function updateLegend() {
   const container = document.getElementById('track-legend'); if (!container) return; container.innerHTML = '';
@@ -846,8 +1231,8 @@ function replayTracks() {
   const maxT = Math.max(...allT); const minT = Math.min(...allT); const dur = maxT - minT || 1000; const start = Date.now();
   const canvas = document.getElementById('track-canvas'); if (!canvas) { replaying = false; return; }
   const ctx = canvas.getContext('2d');
-  const centerX = canvas.width / 2 + offsetX; // Note: offsetX/Y need to be defined in scope, but assuming from setup
-  const centerY = canvas.height / 2 + offsetY;
+  const centerX = canvas.width / 2 + trackOffsetX;
+  const centerY = canvas.height / 2 + trackOffsetY;
   (function step() {
     const el = Date.now() - start;
     const nowT = minT + (el / dur) * (maxT - minT);
@@ -869,8 +1254,8 @@ function replayTracks() {
       const pts = tracks[ip].filter(p => p.t <= nowT);
       ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[ip];
       for (let i = 0; i < pts.length; i++) {
-        const px = centerX + pts[i].x * scale;
-        const py = centerY - pts[i].y * scale;
+        const px = centerX + pts[i].x * trackScale;
+        const py = centerY - pts[i].y * trackScale;
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.stroke();
@@ -886,12 +1271,12 @@ function fitToWindow() {
   const maxX = Math.max(...allPoints.map(p => p.x));
   const minY = Math.min(...allPoints.map(p => p.y));
   const maxY = Math.max(...allPoints.map(p => p.y));
-  const width = maxX - minX;
-  const height = maxY - minY;
+  const width = maxX - minX || 1;
+  const height = maxY - minY || 1;
   const canvas = document.getElementById('track-canvas');
-  scale = Math.min(canvas.width / (width * 1.1), canvas.height / (height * 1.1));
-  offsetX = canvas.width / 2 - (minX + width / 2) * scale;
-  offsetY = canvas.height / 2 + (minY + height / 2) * scale; // inverted y
+  trackScale = Math.min(canvas.width / (width * 1.1), canvas.height / (height * 1.1));
+  trackOffsetX = canvas.width / 2 - (minX + width / 2) * trackScale;
+  trackOffsetY = canvas.height / 2 + (minY + height / 2) * trackScale; // inverted y
   drawTracks();
 }
 
