@@ -1,6 +1,7 @@
 // main.js
 const { app, BrowserWindow, ipcMain, shell} = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { WSManager } = require('./src/wsManager');
 
 let mainWin;
@@ -90,6 +91,42 @@ app.whenReady().then(() => {
   ipcMain.on('open-url', (event, url) => {
     shell.openExternal(url);
   });
+  
+  // Save recording files
+  ipcMain.handle('save-recording-files', async (event, { files }) => {
+    try {
+      const dataLoggerPath = path.join(__dirname, 'dataLogger');
+      if (!fs.existsSync(dataLoggerPath)) {
+        fs.mkdirSync(dataLoggerPath, { recursive: true });
+      }
+      
+      const savedFiles = [];
+      for (const file of files) {
+        const filePath = path.join(dataLoggerPath, file.name);
+        fs.writeFileSync(filePath, file.content, 'utf8');
+        savedFiles.push({
+          name: file.name,
+          path: filePath,
+          folder: dataLoggerPath
+        });
+      }
+      return { success: true, files: savedFiles };
+    } catch (e) {
+      console.error('save-recording-files error:', e);
+      return { success: false, error: e.message };
+    }
+  });
+  
+  // Open file in default application
+  ipcMain.on('open-file', (event, filePath) => {
+    shell.openPath(filePath);
+  });
+  
+  // Open folder in file explorer
+  ipcMain.on('open-folder', (event, folderPath) => {
+    shell.showItemInFolder(folderPath);
+  });
+  
   createWindow();
 });
 

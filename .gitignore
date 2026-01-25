@@ -108,3 +108,4 @@ lerna-debug.log*
 WalkingJourney-*
 
 *-win32-x64
+dataLogger/*

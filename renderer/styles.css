@@ -668,12 +668,119 @@ select:focus {
   to { opacity: 1; }
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes recordBlink {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% { 
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+}
+
 .animate-slide-in {
   animation: slideIn 0.3s ease forwards;
 }
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease forwards;
+}
+
+/* ===== Recording Button Styles ===== */
+#btn-record {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.3s ease;
+  min-width: 70px;
+  justify-content: center;
+}
+
+#btn-record.recording {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  animation: recordBlink 1.5s ease-in-out infinite;
+}
+
+#btn-record .record-dot {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+#btn-record .record-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ===== Saved Files Modal Styles ===== */
+.saved-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: #f5f7fb;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.saved-file-item:hover {
+  background: #edf2ff;
+}
+
+.saved-file-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+}
+
+.saved-file-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.saved-file-actions button {
+  padding: 6px;
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.saved-file-actions button:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.saved-file-actions button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.recording-stats {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.recording-stats strong {
+  color: var(--primary);
 }
 
 /* ===== Device Page Action Buttons ===== */
