@@ -521,14 +521,8 @@
 <script>
     // ===== 常量定义 =====
     const BMI088_NUM = 4; // 0..3 实际传感器，4 为综合/平均
-    // const WS_PATH = `http://192.168.137.93/ws`;
-    const WS_PATH = `http://${window.location.host}/ws`;
-    document.getElementById('wsPath').textContent = WS_PATH;
-    document.getElementById('wsPath2').textContent = WS_PATH;
-    const RECONNECT_DELAY = 2000;
-
+    
     // ===== 状态变量 =====
-    let ws = null;
     let connected = false;
     let lastTs = null;
     let buffers = {}; // 存放历史数据用于 uPlot
@@ -629,95 +623,91 @@
         });
     });
 
-    document.getElementById('setZeroBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
+    // 发送命令到父窗口
+    function sendCommand(cmd) {
+        if (!connected) {
             showNotification('请连接设备', 'error');
             return;
         }
-        ws.send(JSON.stringify({cmd: 'setZero'}));
-        showNotification("成功发送设置零位指令",'success');
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'imu-command',
+                command: cmd
+            }, '*');
+        }
+    }
+    
+    document.getElementById('setZeroBtn').addEventListener('click', () => {
+        sendCommand({cmd: 'setZero'});
+        showNotification("已发送设置零位指令",'success');
     });
     document.getElementById('certAccelBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
-        ws.send(JSON.stringify({cmd: 'insZero'}));
-        showNotification("成功发送惯导重置指令",'success');
+        sendCommand({cmd: 'insZero'});
+        showNotification("已发送惯导重置指令",'success');
     });
     document.getElementById('shutdownBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
-        ws.send(JSON.stringify({cmd: 'shutdown'}));
-        showNotification("成功发送关机指令");
+        sendCommand({cmd: 'shutdown'});
+        showNotification("已发送关机指令");
     });
-    // ===== WebSocket 连接逻辑（自动重连） =====
+    // ===== 数据接收逻辑（通过 postMessage） =====
     function setConnState(ok) {
         connected = ok;
         if (ok) {
             connDot.classList.remove('off');
             connDot.classList.add('connect');
             connStatus.textContent = '已连接';
-            connHint.textContent = WS_PATH;
+            connHint.textContent = '通过主窗口连接';
         } else {
             connDot.classList.remove('connect');
             connDot.classList.add('off');
             connStatus.textContent = '未连接';
-            connHint.textContent = '正在尝试连接...';
+            connHint.textContent = '等待连接...';
         }
     }
 
     let last_receive_time = -20000;
-
-    function connect() {
-        try {
-            console.log('尝试连接 WebSocket:', WS_PATH);
-            ws = new WebSocket(WS_PATH);
-        } catch (e) {
-            console.warn('WebSocket 构造失败', e);
-            setConnState(false);
-            setTimeout(connect, RECONNECT_DELAY);
-            return;
-        }
-        ws.onopen = () => {
-            setConnState(true);
-            ws.send(JSON.stringify({cmd: 'getSettings'}));
-            ws.send(JSON.stringify({cmd: 'getPacketList'}));
-            ws.send(JSON.stringify({cmd: 'getConnSettings'}));
-            ws.send(JSON.stringify({cmd: 'getDeviceInfos'}));
-            console.log('ws open');
-        };
-        ws.onclose = () => {
-            setConnState(false);
-            console.log('ws close');
-            setTimeout(connect, RECONNECT_DELAY);
-        };
-        ws.onerror = (e) => {
-            console.warn('ws error', e);
-            setConnState(false);
-        };
-        ws.onmessage = (evt) => {
-            // 期望 JSON 格式，包含 ts, gyro, raw_accel, ... 等字段
-            try {
-                last_receive_time = Date.now();
-                const msg = JSON.parse(evt.data);
-                handleIMU(msg);
-            } catch (e) {
-                console.warn('无法解析消息', e);
-            }
-        };
+    
+    // 从父窗口接收 IMU 数据
+    console.log('IMU Page - 等待从父窗口接收数据');
+    setConnState(true);
+    
+    // 更新 WebSocket 路径显示
+    if (document.getElementById('wsPath')) {
+        document.getElementById('wsPath').textContent = '由主窗口管理';
     }
-
-    connect();
-    reconnectBtn.addEventListener('click', () => {
-        if (ws) ws.close();
-        setTimeout(connect, 500);
+    if (document.getElementById('wsPath2')) {
+        document.getElementById('wsPath2').textContent = '由主窗口管理';
+    }
+    
+    // 监听来自父窗口的 IMU 数据
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'imu-data') {
+            last_receive_time = Date.now();
+            handleIMU(event.data.data);
+        }
     });
-    // dumpBtn.addEventListener('click', () => { // 请求一次快照，消息结构随固件约定
-    //     if (ws && connected) ws.send(JSON.stringify({cmd: 'request_snapshot'}));
-    // });
+    
+    // 禁用重连按钮
+    reconnectBtn.disabled = true;
+    reconnectBtn.title = '连接由主窗口管理';
+    
+    // 页面加载完成后，请求父窗口发送初始化命令
+    setTimeout(() => {
+        sendCommand({cmd: 'getSettings'});
+        sendCommand({cmd: 'getPacketList'});
+        sendCommand({cmd: 'getConnSettings'});
+        sendCommand({cmd: 'getDeviceInfos'});
+    }, 500); // 稍微延迟确保 iframe 完全加载
+    
+    // 页面加载完成后，请求父窗口发送初始化命令
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            sendCommand({cmd: 'getSettings'});
+            sendCommand({cmd: 'getPacketList'});
+            sendCommand({cmd: 'getConnSettings'});
+            sendCommand({cmd: 'getDeviceInfos'});
+        }, 500); // 稍微延迟确保 iframe 完全加载
+    });
 
     // 静止标志函数
     // 初始状态
@@ -1560,11 +1550,7 @@
 
     // 读取包配置
     document.getElementById('resetPacketsBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
-        ws.send(JSON.stringify({cmd: 'getPacketList'}));
+        sendCommand({cmd: 'getPacketList'});
         showNotification("正在获取数据包消息列表");
     });
     // 清空轨道
@@ -1574,10 +1560,6 @@
 
     // 发送包配置（将轨道内容编码成 uint8_t packet_lst 的二维数组形式并通过 ws 发送）
     document.getElementById('sendPacketsBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
         const packets = [];
         for (let i = 0; i < 5; i++) {
             const lane = document.getElementById('lane' + i);
@@ -1608,24 +1590,16 @@
         // 将 packets 序列化为我们约定的 JSON 格式
         const payload = {cmd: 'set_packet_list', packets};
         // console.log(JSON.stringify(payload));
-        ws.send(JSON.stringify(payload));
+        sendCommand(payload);
         showNotification('已发送包配置到设备', 'success');
     });
     // 读取设备设置
     document.getElementById('resetModeBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
-        ws.send(JSON.stringify({cmd: 'getSettings'}));
+        sendCommand({cmd: 'getSettings'});
         showNotification("正在获取设备信息");
     });
     // 发送传输设置
     document.getElementById('sendModeBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
         const obj = {};
         modeSelects.forEach(id => {
             obj[id] = parseInt(getSelectValue(document.getElementById(id)))
@@ -1633,7 +1607,7 @@
         freqSelects.forEach(id => {
             obj[id] = parseInt(getSelectValue(document.getElementById(id)))
         });
-        ws.send(JSON.stringify({cmd: 'set_transmit_settings', settings: obj}));
+        sendCommand({cmd: 'set_transmit_settings', settings: obj});
         console.log(JSON.stringify({cmd: 'set_transmit_settings', settings: obj}));
         showNotification('已发送传输设置', 'success');
     });
@@ -1663,19 +1637,11 @@
     });
     // 读取设备设置
     document.getElementById('resetConnectionSettingBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
-        ws.send(JSON.stringify({cmd: 'getConnSettings'}));
+        sendCommand({cmd: 'getConnSettings'});
         showNotification("正在获取设备信息");
     });
     // 发送传输设置
     document.getElementById('sendConnectionSettingBtn').addEventListener('click', () => {
-        if (!ws || !connected) {
-            showNotification('请连接设备', 'error');
-            return;
-        }
         // 从表单获取值
         const uuid = document.getElementById('wifi-uuid');
         const pass = document.getElementById('wifi-password');
@@ -1719,11 +1685,11 @@
 
         // 发送到服务器
         try {
-            const message = JSON.stringify({
+            const message = {
                 cmd: 'setConnSettings',
                 settings: obj
-            });
-            ws.send(message);
+            };
+            sendCommand(message);
             console.log('发送连接设置:', message);
             showNotification('已发送传输设置', 'success');
         } catch (error) {
@@ -1786,15 +1752,13 @@
 
     // ===== 连接状态显示 helper =====
     function updateConnUI() {
-        if (connected && (Date.now() - last_receive_time > 2000))
-        {
-            ws.close();
+        // 检查是否有数据更新（超过2秒没有收到数据则认为断开）
+        if (connected && (Date.now() - last_receive_time > 2000)) {
             connected = false;
-        } // 检查WebSocket连接状态
+        }
         connDot.classList.toggle('connect', connected);
         connDot.classList.toggle('off', !connected);
         connStatus.textContent = connected ? '已连接' : '未连接';
-
     }
 
     setInterval(updateConnUI, 600);

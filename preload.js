@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   disconnectWS: (opts) => ipcRenderer.invoke('disconnect-ws', opts),
   updateConfig: (opts) => ipcRenderer.invoke('update-config', opts),
   broadcastCmd: (cmdObj) => ipcRenderer.send('broadcast-cmd', JSON.stringify(cmdObj)),
+  sendWSCommand: (opts) => ipcRenderer.send('send-ws-command', opts),
   listConnections: () => ipcRenderer.invoke('list-connections'),
   getHostIPForSubnet: (args) => ipcRenderer.invoke('getHostIPForSubnet', args),
   cancelScan: () => ipcRenderer.invoke('cancel-scan'),

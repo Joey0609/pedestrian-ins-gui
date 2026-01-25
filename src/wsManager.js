@@ -314,6 +314,21 @@ class WSManager extends EventEmitter {
     });
   }
 
+  sendToDevice(ip, obj) {
+    const c = this.conns[ip];
+    if (c && c.ws && c.ws.readyState === WebSocket.OPEN) {
+      console.log('send to', ip, obj);
+      try { 
+        c.ws.send(JSON.stringify(obj));
+        console.log("Sent", JSON.stringify(obj), "to", ip);
+      } catch (e) {
+        console.error('Failed to send to', ip, e);
+      }
+    } else {
+      console.warn('Device', ip, 'not connected or WebSocket not ready');
+    }
+  }
+
   listConnections() {
     return Object.keys(this.conns).map(ip => ({ ip, state: this.conns[ip].state, lastMsg: this.conns[ip].lastMsg, connSettings: this.conns[ip].connSettings }));
   }

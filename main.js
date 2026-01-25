@@ -77,6 +77,16 @@ app.whenReady().then(() => {
       wsMgr.broadcast(JSON.parse(args));
     } catch (e) { }
   });
+  
+  ipcMain.on('send-ws-command', (event, args) => {
+    try {
+      const { ip, cmd } = args;
+      wsMgr.sendToDevice(ip, cmd);
+    } catch (e) {
+      console.error('send-ws-command error:', e);
+    }
+  });
+  
   ipcMain.on('open-url', (event, url) => {
     shell.openExternal(url);
   });

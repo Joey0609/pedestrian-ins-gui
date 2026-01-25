@@ -5,6 +5,11 @@ import { OrbitControls } from '../node_modules/three/examples/jsm/controls/Orbit
 import { OBJLoader } from '../node_modules/three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from '../node_modules/three/examples/jsm/loaders/MTLLoader.js';
 
+// Load shared IMU data processor
+const imuProcessorScript = document.createElement('script');
+imuProcessorScript.src = '../src/imuDataProcessor.js';
+document.head.appendChild(imuProcessorScript);
+
 let PCBModelGlobal = null; // cached loaded model/group
 
 let rendererMap = new Map();
@@ -113,6 +118,27 @@ function throttle(func, limit) {
 // Throttled versions of expensive functions
 let throttledDrawTracks = null;
 let throttledUpdateLegend = null;
+
+// Listen for commands from imupage iframe
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'imu-command') {
+    const command = event.data.command;
+    console.log('Received command from iframe:', command);
+    
+    // Find which device's iframe sent the command
+    // Check currentPage to see if we're on a device-specific page
+    if (currentPage !== 'attitude' && currentPage !== 'track') {
+      // currentPage is an IP address
+      const targetIp = currentPage;
+      console.log(`Sending command to specific device: ${targetIp}`, command);
+      electronAPI.sendWSCommand({ ip: targetIp, cmd: command });
+    } else {
+      // Fallback: broadcast to all devices (shouldn't happen with iframe)
+      console.log('Broadcasting command to all devices:', command);
+      electronAPI.broadcastCmd(command);
+    }
+  }
+});
 
 // Color map
 const COLORS = {
@@ -264,6 +290,28 @@ async function disconnectDevice(ip) {
       connections.splice(idx, 1);
     }
     
+    // Clean up 3D renderer for this device
+    const rendererEntry = rendererMap.get(ip);
+    if (rendererEntry) {
+      // Dispose of Three.js resources
+      if (rendererEntry.renderer) {
+        rendererEntry.renderer.dispose();
+      }
+      if (rendererEntry.scene) {
+        rendererEntry.scene.traverse((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach(mat => mat.dispose());
+            } else {
+              obj.material.dispose();
+            }
+          }
+        });
+      }
+      rendererMap.delete(ip);
+    }
+    
     // Remove from tracks
     if (tracks[ip]) {
       delete tracks[ip];
@@ -371,7 +419,7 @@ function showDevicePage(ip) {
         </div>
       </div>
       <div class="device-page-content">
-        <iframe class="device-iframe" src="http://${ip}/" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+        <iframe class="device-iframe" data-ip="${ip}" src="../src/imupage.html" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
       </div>
     `;
     
@@ -564,6 +612,20 @@ electronAPI.onWSMessage((msg) => {
     } catch (error) {
       console.error("Base64 decoding failed:", error);
       return;
+    }
+  }
+  
+  // Forward data to device page iframe if exists
+  const deviceIframe = document.querySelector(`.device-iframe[data-ip="${ip}"]`);
+  if (deviceIframe && deviceIframe.contentWindow) {
+    try {
+      deviceIframe.contentWindow.postMessage({
+        type: 'imu-data',
+        ip: ip,
+        data: data
+      }, '*');
+    } catch (e) {
+      console.warn('Failed to post message to iframe:', e);
     }
   }
   
