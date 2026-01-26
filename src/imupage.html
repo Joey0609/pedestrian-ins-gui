@@ -468,6 +468,23 @@
                             </span>
                         </div>
                     </div>
+                    <div style="display:grid;grid-template-columns:5fr 5fr;gap:8px;margin-top:8px;margin-bottom:8px">
+                        <div class="input-group">
+                            <input type="text" pattern=".{1,32}" class="input-field" id="pair-wifi-uuid" placeholder=" " required>
+                            <label class="input-label" for="pair-wifi-uuid">配对Wifi名称</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="password" class="input-field" id="pair-wifi-password" placeholder=" " required>
+                            <label class="input-label" for="pair-wifi-password">配对Wifi密码</label>
+                            <span class="toggle-password" id="toggle-pair-password">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </span>
+                        </div>
+                    </div>
                     <div style="display:grid;grid-template-columns:3fr 6fr 3fr 3fr;gap:8px;margin-top:15px;margin-bottom:8px"><!--grid-column: span 2;-->
                         <div class="input-group">
                             <input type="text"  pattern="^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$" class="input-field" id="tcp_trans_port" placeholder=" " required>
@@ -845,6 +862,8 @@
         {
             document.getElementById('wifi-uuid').value = msg.uuid || '';
             document.getElementById('wifi-password').value = msg.pass || '';
+            document.getElementById('pair-wifi-uuid').value = msg.pair_uuid || '';
+            document.getElementById('pair-wifi-password').value = msg.pair_pass || '';
             document.getElementById('tcp_trans_port').value = msg.tcp_port || '';
             document.getElementById('udp_host_ip').value = msg.udp_host_ip || '';
             document.getElementById('udp_host_port').value = msg.udp_host_port || '';
@@ -1635,6 +1654,27 @@
         e.preventDefault();
         passwordInput.type = 'password';
     });
+    
+    // 配对WIFI密码显示/隐藏
+    const pairPasswordInput = document.getElementById('pair-wifi-password');
+    const togglePairPassword = document.getElementById('toggle-pair-password');
+    togglePairPassword.addEventListener('mousedown', function () {
+        pairPasswordInput.type = 'text';
+    });
+    togglePairPassword.addEventListener('mouseup', function () {
+        pairPasswordInput.type = 'password';
+    });
+    togglePairPassword.addEventListener('mouseleave', function () {
+        pairPasswordInput.type = 'password';
+    });
+    togglePairPassword.addEventListener('touchstart', function (e) {
+        e.preventDefault();
+        pairPasswordInput.type = 'text';
+    });
+    togglePairPassword.addEventListener('touchend', function (e) {
+        e.preventDefault();
+        pairPasswordInput.type = 'password';
+    });
     // 读取设备设置
     document.getElementById('resetConnectionSettingBtn').addEventListener('click', () => {
         sendCommand({cmd: 'getConnSettings'});
@@ -1645,6 +1685,8 @@
         // 从表单获取值
         const uuid = document.getElementById('wifi-uuid');
         const pass = document.getElementById('wifi-password');
+        const pairUuid = document.getElementById('pair-wifi-uuid');
+        const pairPass = document.getElementById('pair-wifi-password');
         const tcpPort = document.getElementById('tcp_trans_port');
         const udpHostIp = document.getElementById('udp_host_ip');
         const udpHostPort = document.getElementById('udp_host_port');
@@ -1655,7 +1697,10 @@
             showNotification('WiFi名称是否合法', 'error');
             return;
         }
-
+        if (!pairUuid.validity.valid) {
+            showNotification('配对WiFi名称是否合法', 'error');
+            return;
+        }
         if (!tcpPort.validity.valid) {
             showNotification('TCP端口是否合法', 'error');
             return;
