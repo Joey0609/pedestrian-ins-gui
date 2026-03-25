@@ -5,6 +5,8 @@ import { OrbitControls } from '../node_modules/three/examples/jsm/controls/Orbit
 import { OBJLoader } from '../node_modules/three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from '../node_modules/three/examples/jsm/loaders/MTLLoader.js';
 
+const electronAPI = window.electronAPI;
+
 // Load shared IMU data processor
 const imuProcessorScript = document.createElement('script');
 imuProcessorScript.src = '../src/imuDataProcessor.js';
@@ -123,6 +125,34 @@ function throttle(func, limit) {
 // Throttled versions of expensive functions
 let throttledDrawTracks = null;
 let throttledUpdateLegend = null;
+
+const runtimeMemoryEl = document.getElementById('runtime-memory');
+const runtimeCpuEl = document.getElementById('runtime-cpu');
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '--';
+  const mb = bytes / (1024 * 1024);
+  return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`;
+}
+
+async function updateRuntimeStats() {
+  if (!window.electronAPI || typeof window.electronAPI.getRuntimeStats !== 'function') return;
+  try {
+    const stats = await window.electronAPI.getRuntimeStats();
+    if (runtimeMemoryEl && stats && stats.memory) {
+      runtimeMemoryEl.textContent = formatBytes(stats.memory.rss);
+    }
+    if (runtimeCpuEl && stats && stats.cpu) {
+      const cpu = Math.max(0, stats.cpu.percent || 0);
+      runtimeCpuEl.textContent = `${cpu.toFixed(cpu >= 10 ? 0 : 1)}%`;
+    }
+  } catch (e) {
+    console.warn('updateRuntimeStats error', e);
+  }
+}
+
+updateRuntimeStats();
+setInterval(updateRuntimeStats, 1000);
 
 // Listen for commands from imupage iframe
 window.addEventListener('message', (event) => {
@@ -714,7 +744,16 @@ async function listConns() {
 function layoutGrid(forceRebuild = false) {
   const grid = document.getElementById('grid');
   if (!grid) return;
-  const count = connections.length || 1;
+  const count = connections.length;
+  if (count === 0) {
+    grid.innerHTML = `
+      <div class="card" style="grid-column:1 / -1;display:flex;align-items:center;justify-content:center;min-height:220px;color:#667085;background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.06)">
+        当前没有已连接设备
+      </div>
+    `;
+    rendererMap.clear();
+    return;
+  }
   const rows = Math.ceil(Math.sqrt(count));
   const cols = Math.ceil(count / rows);
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
@@ -777,6 +816,10 @@ function createAttitudeRenderer(container, conn) {
   if (!THREE || !THREE.WebGLRenderer) {
     container.innerHTML = '<div style="padding:12px;color:#444">three.js 未加载，显示占位信息<br/>' + (conn ? JSON.stringify(conn.lastMsg || {}) : '无数据') + '</div>';
     return;
+  }
+  if (!conn) {
+    container.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#667085;background:rgba(255,255,255,0.6);border-radius:8px">暂无设备</div>';
+    return { renderer: null, scene: null, camera: null, model: null, controls: null };
   }
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);

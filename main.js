@@ -6,6 +6,33 @@ const { WSManager } = require('./src/wsManager');
 
 let mainWin;
 let wsMgr;
+let lastCpuSample = process.cpuUsage();
+let lastCpuSampleAt = process.hrtime.bigint();
+
+function getRuntimeStats() {
+  const now = process.hrtime.bigint();
+  const cpu = process.cpuUsage();
+  const elapsedMicros = Number(now - lastCpuSampleAt) / 1000;
+  const usedMicros = (cpu.user - lastCpuSample.user) + (cpu.system - lastCpuSample.system);
+  const cpuPercent = elapsedMicros > 0 ? (usedMicros / elapsedMicros) * 100 : 0;
+
+  lastCpuSample = cpu;
+  lastCpuSampleAt = now;
+
+  const mem = process.memoryUsage();
+  return {
+    memory: {
+      rss: mem.rss,
+      heapTotal: mem.heapTotal,
+      heapUsed: mem.heapUsed,
+      external: mem.external,
+    },
+    cpu: {
+      percent: cpuPercent,
+    },
+  };
+}
+
 function createWindow() {
   mainWin = new BrowserWindow({
     width: 1280,
@@ -61,6 +88,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('list-connections', () => {
     return wsMgr.listConnections();
+  });
+
+  ipcMain.handle('get-runtime-stats', () => {
+    return getRuntimeStats();
   });
 
   ipcMain.handle('getHostIPForSubnet', async (event, args) => {

@@ -56,12 +56,25 @@
         /* 主内容布局 */
         .wrap{padding:8px;display:grid;grid-template-columns: 360px 1fr;gap:18px;align-items:start}
         .hidden {display: none;}
-        @media (max-width:1200px){.wrap{grid-template-columns:1fr;}}
+        @media (max-width:1200px){
+            .wrap{grid-template-columns:1fr;}
+            aside.panel{position:static;max-height:none;overflow:visible;}
+        }
 
-        /* 侧边栏 */
-        aside.panel{background:var(--card);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);min-height:200px}
-        .nav{display:flex;flex-direction:column;gap:8px;user-select:none;
-            position: sticky;bottom: 0;z-index: 999; }
+        /* 侧边栏：整体跟随页面滚动，并允许内部滚动 */
+        aside.panel{
+            background:var(--card);
+            border-radius:var(--radius);
+            padding:12px;
+            box-shadow:var(--shadow);
+            min-height:200px;
+            position:sticky;
+            top:90px;
+            max-height:calc(100vh - 88px);
+            overflow-y:auto;
+            z-index: 999;
+        }
+        .nav{display:flex;flex-direction:column;gap:8px;user-select:none;}
         .nav button{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;border:none;background:transparent;cursor:pointer;color:var(--muted)}
         .nav button.active{background:linear-gradient(90deg,var(--glass),transparent);color:var(--text);font-weight:600}
 
@@ -97,23 +110,34 @@
         .group{overflow:hidden;border-radius:10px}
         .group .group-title{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:linear-gradient(90deg,transparent,rgba(0,0,0,0.02));font-weight:600}
         .group table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;table-layout:fixed}
-        .group thead th{font-size:0.85rem;padding:8px;text-align:center;background:rgba(0,0,0,0.03);width:110px}
-        .group thead th.ts{width:140px}
+        .group thead th{font-size:0.85rem;padding:8px;text-align:center;background:rgba(0,0,0,0.03);width:60px}
+        .group thead th.ts{width:80px}
         .group tbody td{padding:6px;text-align:center;font-family:var(--mono);white-space:nowrap;width:110px}
         .label-col{font-weight:700;text-align:left;padding-left:12px}
 
         /* 保证数字列固定宽度，不随小数点变化overflow:hidden;text-overflow:ellipsis; */
         .num{width:110px;max-width:110px;white-space: pre-line;}
         .num.small{width:80px;max-width:80px}
-        .ts{width:140px;margin-top: 10px}
+        .ts{width:50px;margin-top: 10px}
 
         /* 图表区 */
         .plots{display:flex;flex-direction:row;gap:12px}
         /*display:flex;*/
         .plot-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:6px}
-        .plot-controls{display:flex;gap:8px;align-items:center}
-        #charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        @media (max-width:900px){#charts{grid-template-columns:1fr}}
+        .plot-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        #plotCards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        @media (max-width:1200px){#plotCards{grid-template-columns:1fr}}
+        .btn.toggled{background:linear-gradient(135deg,var(--accent),#06b6d4);color:#fff;border-color:transparent}
+        .plot-card{display:flex;flex-direction:column;gap:8px;min-height:300px;overflow:hidden}
+        .plot-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+        .plot-card-title{font-weight:600;word-break:break-word}
+        .plot-card-sub{font-size:12px;color:var(--muted);word-break:break-word}
+        .plot-card-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+        .axis-toggles{display:flex;gap:10px;flex-wrap:wrap;padding:4px 0}
+        .axis-toggle-item{display:flex;align-items:center;gap:4px;font-size:12px}
+        .axis-dot{width:10px;height:10px;border-radius:50%}
+        .plot-chart{height:220px;cursor:crosshair;max-width:100%;overflow:hidden}
+        .plot-empty{padding:12px;border:1px dashed rgba(0,0,0,0.15);border-radius:10px;color:var(--muted);text-align:center}
 
         /*.uplot{height:220px}*/
 
@@ -136,6 +160,7 @@
 
         /* ===== 自定义Select下拉框 ===== */
         .custom-select {position: relative;user-select: none;/*min-width: 180px;*/font-family: inherit;display: flex;align-items: center;}
+        #plotSelectType .select-trigger{min-width:110px;}
         .select-trigger {display: flex;align-items: center;justify-content: space-between;padding: 10px 14px;background: var(--card);border: 1px solid rgba(0, 0, 0, 0.04);border-radius: 10px;cursor: pointer;box-shadow: var(--shadow);transition: all 0.2s ease;color: var(--text);font-size: 0.9rem;}
         .select-trigger:hover {border-color: rgba(37, 99, 235, 0.2);box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);}
         .select-trigger:active {transform: translateY(1px);box-shadow: 0 2px 8px rgba(22, 28, 45, 0.08);}
@@ -288,7 +313,7 @@
     <main>
         <!-- 实时数据视图 -->
         <section class="card fade-in" id="dataView">
-            <h4>实时数据（表格）</h4>
+            <h4>实时数据</h4>
             <div style="display:flex;gap:12px;flex-wrap:wrap">
                 <div class="card"
                      style="flex:1;min-width:240px;display:flex;align-items:center;justify-content:space-between">
@@ -328,7 +353,7 @@
 
         <!-- 折线图视图 -->
         <section class="card fade-in hidden" id="plotView">
-            <h4>折线图（uPlot）</h4>
+            <h4>折线图</h4>
             <div class="plot-header">
                 <div class="plot-controls">
                     <div class="custom-select" id="plotSelectType">
@@ -344,28 +369,12 @@
                         <div class="select-options"></div>
                     </div>
 
-                    <div class="custom-select" id="plotSelectAxis">
-                        <div class="select-trigger">
-                            <span class="select-value">请选择</span>
-                        </div>
-                        <div class="select-options"></div>
-                    </div>
-
-                    <button class="btn" id="addSeriesBtn">添加曲线</button>
-                    <button class="btn" id="clearSeriesBtn">清空曲线</button>
-                </div>
-                <!--                <div class="subtitle">时间窗口: <span id="timeWindowLabel">10s</span> （用鼠标滚轮横向缩放）</div>-->
-            </div>
-            <div id="charts">
-                <div class="card" style="min-height:260px">
-                    <div class="uplot" id="mainChart" style="height:220px"></div>
-                </div>
-                <div class="card" style="min-height:260px">
-                    <div style="display:flex;flex-direction:column;height:100%">
-                        <div id="seriesList" style="flex:1;overflow:auto"></div>
-                    </div>
+                    <button class="btn" id="addPlotCardBtn">添加图卡</button>
+                    <button class="btn" id="clearPlotCardsBtn">清空图卡</button>
                 </div>
             </div>
+            <div id="plotCards"></div>
+            <div class="plot-empty" id="plotEmpty">暂无图卡，请先选择数据类型与传感器后点击“添加图卡”。</div>
 </section>
 <!-- 设置视图 -->
         <section class="card fade-in hidden" id="settingsView">
@@ -477,8 +486,7 @@
                             <input type="password" class="input-field" id="pair-wifi-password" placeholder=" " required>
                             <label class="input-label" for="pair-wifi-password">配对Wifi密码</label>
                             <span class="toggle-password" id="toggle-pair-password">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                     <circle cx="12" cy="12" r="3"></circle>
                                 </svg>
@@ -538,7 +546,10 @@
 <script>
     // ===== 常量定义 =====
     const BMI088_NUM = 4; // 0..3 实际传感器，4 为综合/平均
-    
+    const WS_PATH = '由主窗口管理';
+    document.getElementById('wsPath').textContent = WS_PATH;
+    document.getElementById('wsPath2').textContent = WS_PATH;
+
     // ===== 状态变量 =====
     let connected = false;
     let lastTs = null;
@@ -622,6 +633,7 @@
                 body.setAttribute('data-theme', 'dark');
                 // themeBtn.textContent = '切换日间模式';
             }
+            window.dispatchEvent(new CustomEvent('plot-theme-changed'));
         }
 
         themeBtn.addEventListener('click', () => {
@@ -640,7 +652,6 @@
         });
     });
 
-    // 发送命令到父窗口
     function sendCommand(cmd) {
         if (!connected) {
             showNotification('请连接设备', 'error');
@@ -653,78 +664,67 @@
             }, '*');
         }
     }
-    
+
     document.getElementById('setZeroBtn').addEventListener('click', () => {
         sendCommand({cmd: 'setZero'});
-        showNotification("已发送设置零位指令",'success');
+        showNotification("成功发送设置零位指令",'success');
     });
     document.getElementById('certAccelBtn').addEventListener('click', () => {
         sendCommand({cmd: 'insZero'});
-        showNotification("已发送惯导重置指令",'success');
+        showNotification("成功发送惯导重置指令",'success');
     });
     document.getElementById('shutdownBtn').addEventListener('click', () => {
         sendCommand({cmd: 'shutdown'});
-        showNotification("已发送关机指令");
+        showNotification("成功发送关机指令");
     });
-    // ===== 数据接收逻辑（通过 postMessage） =====
+    // ===== 连接状态与消息接收（由主窗口转发） =====
     function setConnState(ok) {
         connected = ok;
         if (ok) {
             connDot.classList.remove('off');
             connDot.classList.add('connect');
             connStatus.textContent = '已连接';
-            connHint.textContent = '通过主窗口连接';
+            connHint.textContent = '由主窗口转发';
         } else {
             connDot.classList.remove('connect');
             connDot.classList.add('off');
             connStatus.textContent = '未连接';
-            connHint.textContent = '等待连接...';
+            connHint.textContent = '等待主窗口数据...';
         }
     }
 
     let last_receive_time = -20000;
-    
-    // 从父窗口接收 IMU 数据
-    console.log('IMU Page - 等待从父窗口接收数据');
+
     setConnState(true);
-    
-    // 更新 WebSocket 路径显示
-    if (document.getElementById('wsPath')) {
-        document.getElementById('wsPath').textContent = '由主窗口管理';
-    }
-    if (document.getElementById('wsPath2')) {
-        document.getElementById('wsPath2').textContent = '由主窗口管理';
-    }
-    
-    // 监听来自父窗口的 IMU 数据
+    reconnectBtn.disabled = true;
+    reconnectBtn.title = '连接由主窗口管理';
+
     window.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'imu-data') {
             last_receive_time = Date.now();
+            setConnState(true);
             handleIMU(event.data.data);
         }
     });
-    
-    // 禁用重连按钮
-    reconnectBtn.disabled = true;
-    reconnectBtn.title = '连接由主窗口管理';
-    
-    // 页面加载完成后，请求父窗口发送初始化命令
+
     setTimeout(() => {
         sendCommand({cmd: 'getSettings'});
         sendCommand({cmd: 'getPacketList'});
         sendCommand({cmd: 'getConnSettings'});
         sendCommand({cmd: 'getDeviceInfos'});
-    }, 500); // 稍微延迟确保 iframe 完全加载
-    
-    // 页面加载完成后，请求父窗口发送初始化命令
+    }, 500);
+
     window.addEventListener('load', () => {
         setTimeout(() => {
             sendCommand({cmd: 'getSettings'});
             sendCommand({cmd: 'getPacketList'});
             sendCommand({cmd: 'getConnSettings'});
             sendCommand({cmd: 'getDeviceInfos'});
-        }, 500); // 稍微延迟确保 iframe 完全加载
+        }, 500);
     });
+    // dumpBtn.addEventListener('click', () => { // 请求一次快照，消息结构随固件约定
+    //     if (ws && connected) ws.send(JSON.stringify({cmd: 'request_snapshot'}));
+    // });
 
     // 静止标志函数
     // 初始状态
@@ -1018,114 +1018,438 @@
         }
     }
 
-    // ===== Buffers 与 uPlot 数据管理 =====
+    // ===== Buffers 与多图卡 uPlot 数据管理 =====
+    const MAX_POINTS = 6000;
+    const PLOT_COLORS = ['#ef4444', '#2563eb', '#16a34a', '#f59e0b', '#06b6d4', '#9333ea', '#db2777', '#ea580c', '#14b8a6'];
+
+    const plotTypeSel = document.getElementById('plotSelectType');
+    const plotSensorSel = document.getElementById('plotSelectSensor');
+    const addPlotCardBtn = document.getElementById('addPlotCardBtn');
+    const clearPlotCardsBtn = document.getElementById('clearPlotCardsBtn');
+    const plotCardsEl = document.getElementById('plotCards');
+    const plotEmptyEl = document.getElementById('plotEmpty');
+
+    let plotCards = [];
+    let plotCardSeq = 1;
+    let draggingCardId = null;
+
     function pushToBuffers(msg) {
-        const ts = msg.ts || Date.now();
-        // 记录 ts
+        const ts = (typeof msg.timestamp === 'number')
+            ? msg.timestamp
+            : ((typeof msg.ts === 'number') ? msg.ts : Date.now() * 1000);
+
         buffers.t.push(ts);
-        // 为一些常用序列建立缓冲，例如 raw_accel, gyro, eular, quat -> 选取部分 axis
-        // 我们把每条可绘制的“系列”用 key: `${group}_${sensor}_${axis}` 存储到 buffers
-        ['raw_accel', 'gyro', 'eular', 'quat', 'linear_accel', 'earth_accel'].forEach(group => {
+
+        ['raw_accel', 'raw_gyro', 'eular', 'quat', 'linear_accel', 'earth_accel', 'kf_accel', 'kf_velocity', 'displacement'].forEach(group => {
             const dims = DATA_GROUPS.find(g => g.key === group)?.dims || 1;
             for (let s = 0; s < BMI088_NUM; s++) {
                 for (let a = 0; a < dims; a++) {
                     const key = `${group}_${s}_${a}`;
                     if (!buffers[key]) buffers[key] = [];
-                    const val = (msg[group] && msg[group][s] && typeof msg[group][s][a] === 'number') ? msg[group][s][a] : NaN;
+                    let val = NaN;
+                    if (dims === 1) {
+                        if (msg[group] && typeof msg[group][s] === 'number') val = msg[group][s];
+                    } else if (msg[group] && msg[group][s] && typeof msg[group][s][a] === 'number') {
+                        val = msg[group][s][a];
+                    }
                     buffers[key].push(val);
                 }
             }
         });
 
-        // 保持缓冲大小（根据最大点数限制）
-        const maxPoints = 6000; // 可调整
-        if (buffers.t.length > maxPoints) {
-            const cut = buffers.t.length - maxPoints;
+        if (buffers.t.length > MAX_POINTS) {
+            const cut = buffers.t.length - MAX_POINTS;
             buffers.t.splice(0, cut);
-            for (const k in buffers) if (k !== 't') buffers[k].splice(0, cut);
+            for (const k in buffers) {
+                if (k !== 't' && Array.isArray(buffers[k])) buffers[k].splice(0, cut);
+            }
         }
 
-        // 更新主图数据（只显示 visibleSeries）
-        refreshMainPlot();
+        refreshAllPlotCards();
     }
-    
-    // ===== uPlot 主图初始化与刷新 =====
-    function initMainPlot() {
-        const opts = {
-            width: document.getElementById('mainChart').clientWidth,
+
+    function ensureYRange(minV, maxV) {
+        if (!isFinite(minV) || !isFinite(maxV)) return {min: -1, max: 1};
+        if (minV === maxV) return {min: minV - 1, max: maxV + 1};
+        const range = maxV - minV;
+        const margin = range * 0.02;
+        return {min: minV - margin, max: maxV + margin};
+    }
+
+    function getHistorySeconds() {
+        const t = buffers.t || [];
+        if (t.length < 2) return 0;
+        return Math.max(0, (t[t.length - 1] - t[0]) / 1000000);
+    }
+
+    function getGroupDims(type) {
+        return DATA_GROUPS.find(g => g.key === type)?.dims || 1;
+    }
+
+    function updatePlotEmpty() {
+        plotEmptyEl.classList.toggle('hidden', plotCards.length > 0);
+    }
+
+    function updateCardButtons(card) {
+        card.pauseBtn.textContent = card.state.paused ? '继续' : '暂停';
+        card.pauseBtn.classList.toggle('toggled', card.state.paused);
+        card.autoXBtn.classList.toggle('toggled', card.state.autoX);
+    }
+
+    function getXWindowByState(state, historySec) {
+        if (historySec <= 0) return {xMin: -1, xMax: 0};
+        if (state.autoX) return {xMin: -historySec, xMax: 0};
+
+        state.xRangeSec = Math.max(0.1, Math.min(state.xRangeSec, Math.max(historySec, 0.1)));
+        const maxOffset = Math.max(0, historySec - state.xRangeSec);
+        state.xOffsetSec = Math.max(0, Math.min(state.xOffsetSec, maxOffset));
+        const xMax = -state.xOffsetSec;
+        const xMin = xMax - state.xRangeSec;
+        return {xMin, xMax};
+    }
+
+    function zoomCardX(card, multiplier) {
+        if (!isFinite(multiplier) || multiplier <= 0) return;
+        card.state.xRangeSec = Math.max(0.1, Math.min(120, card.state.xRangeSec * multiplier));
+        if (!card.state.autoX) {
+            const history = getHistorySeconds();
+            const maxOffset = Math.max(0, history - card.state.xRangeSec);
+            card.state.xOffsetSec = Math.max(0, Math.min(card.state.xOffsetSec, maxOffset));
+        }
+    }
+
+    function scaleToFitCard(card) {
+        const historySec = getHistorySeconds();
+        card.state.xRangeSec = Math.max(0.5, historySec || 5);
+        card.state.xOffsetSec = 0;
+        card.state.autoX = true;
+
+        let yMin = Number.POSITIVE_INFINITY;
+        let yMax = Number.NEGATIVE_INFINITY;
+        for (let axis = 0; axis < card.dims; axis++) {
+            if (!card.axisEnabled[axis]) continue;
+            const key = `${card.type}_${card.sensor}_${axis}`;
+            const src = buffers[key] || [];
+            for (let i = 0; i < src.length; i++) {
+                const v = src[i];
+                if (!isFinite(v)) continue;
+                if (v < yMin) yMin = v;
+                if (v > yMax) yMax = v;
+            }
+        }
+        const y = (isFinite(yMin) && isFinite(yMax)) ? ensureYRange(yMin, yMax) : {min: -1, max: 1};
+        card.state.yMin = y.min;
+        card.state.yMax = y.max;
+        card.state.autoY = true;
+
+        updateCardButtons(card);
+        refreshPlotCard(card);
+    }
+
+    function getUplotTheme() {
+        const dark = document.body.getAttribute('data-theme') === 'dark';
+        return dark
+            ? {axis: '#dbe7ff', grid: 'rgba(173,191,220,0.18)'}
+            : {axis: '#1f2937', grid: 'rgba(100,116,139,0.22)'};
+    }
+
+    function createCardPlot(card, seriesData) {
+        if (card.plot) card.plot.destroy();
+        const theme = getUplotTheme();
+        const series = [{label: 'Time (s)'}];
+        for (let i = 0; i < card.dims; i++) {
+            series.push({
+                label: `axis${i}`,
+                stroke: PLOT_COLORS[i % PLOT_COLORS.length],
+                width: 1,
+                show: card.axisEnabled[i] !== false,
+                spanGaps: true,
+                points: {show: false}
+            });
+        }
+        card.plot = new uPlot({
+            width: card.chartEl.clientWidth || 600,
             height: 220,
-            series: [{label: 'Time'}],
-            scales: {x: {time: false}, y: {}},
-            axes: [{}, {}],
-            hooks: {},
-            cursor: {drag: {x: false, y: false}},
-            plugins: []
-        };
-        plots.main = new uPlot(opts, [[], []], document.getElementById('mainChart'));
-
-        // 鼠标滚轮改变 timeWindowMs
-        document.getElementById('mainChart').addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const delta = e.deltaY;
-            if (delta > 0) timeWindowMs = Math.min(60000000000, timeWindowMs * 1.2);
-            else timeWindowMs = Math.max(1000000, timeWindowMs / 1.2);
-            refreshMainPlot();
-        });
+            legend: {show: false},
+            series,
+            scales: {x: {time: false, auto: false}, y: {auto: false}},
+            axes: [
+                {label: 'time(s)', stroke: theme.axis, grid: {stroke: theme.grid}, ticks: {stroke: theme.axis}},
+                {label: 'value', stroke: theme.axis, grid: {stroke: theme.grid}, ticks: {stroke: theme.axis}}
+            ],
+            cursor: {drag: {x: false, y: false}, points: {show: false}}
+        }, seriesData, card.chartEl);
     }
 
-    initMainPlot();
-
-    function refreshMainPlot() {
-        if (!plots.main) return;
-        // 根据 timeWindowMs 找到起始 index
+    function refreshPlotCard(card) {
+        if (!card || !card.plot) return;
         const t = buffers.t || [];
         if (t.length === 0) {
-            plots.main.setData([[]]);
+            card.plot.setData([[]]);
             return;
         }
-        const tNow = t[t.length - 1];
-        const tFrom = tNow - timeWindowMs;
-        // find first index >= tFrom
-        let idx = 0;
-        while (idx < t.length && t[idx] < tFrom) idx++;
-        // const tsSlice = t.slice(idx);
-        const tsSlice = t.slice(idx).map(v => v / 1000000);
-        // 准备 series 数据
-        const seriesData = [tsSlice];
-        const seriesMeta = [{label: 'Time'}];
-        visibleSeries.forEach(s => {
-            const arr = buffers[s.key] ? buffers[s.key].slice(idx) : new Array(tsSlice.length).fill(NaN);
+
+        const latest = t[t.length - 1];
+        const xAll = t.map(v => (v - latest) / 1000000);
+        const historySec = getHistorySeconds();
+        const {xMin, xMax} = getXWindowByState(card.state, historySec);
+
+        let startIdx = 0;
+        while (startIdx < xAll.length && xAll[startIdx] < xMin) startIdx++;
+        let endIdx = xAll.length;
+        while (endIdx > startIdx && xAll[endIdx - 1] > xMax) endIdx--;
+
+        const xSlice = xAll.slice(startIdx, endIdx);
+        const seriesData = [xSlice];
+
+        for (let axis = 0; axis < card.dims; axis++) {
+            const key = `${card.type}_${card.sensor}_${axis}`;
+            const src = buffers[key] || [];
+            let arr = src.slice(startIdx, endIdx);
+            if (!card.axisEnabled[axis]) arr = new Array(xSlice.length).fill(NaN);
             seriesData.push(arr);
-            seriesMeta.push({label: s.label});
-        });
-
-        // 更新 uPlot（如果 series 数量 changed，需要重构 uPlot，因为 uPlot 的 series 数量固定）
-        const needRecreate = plots.main.series.length !== seriesData.length;
-        if (needRecreate) {
-            const el = document.getElementById('mainChart');
-            el.innerHTML = '';
-
-            const opts = {
-                width: el.clientWidth || 600,
-                height: 220,
-                series: seriesMeta.map((s, i) => i === 0 ? {label: 'Time'} : {label: s.label, stroke: 'red', width: 1}),
-                scales: {x: {time: false}, y: {}},
-                axes: [{}, {}]
-            };
-
-            plots.main = new uPlot(opts, seriesData, el);
-        } else {
-            plots.main.setData(seriesData);
+            card.plot.setSeries(axis + 1, {show: card.axisEnabled[axis] !== false, stroke: PLOT_COLORS[axis % PLOT_COLORS.length]});
         }
+
+        card.plot.setData(seriesData);
+        card.plot.setScale('x', {min: xMin, max: xMax});
+
+        if (card.state.autoY) {
+            let yMin = Number.POSITIVE_INFINITY;
+            let yMax = Number.NEGATIVE_INFINITY;
+            for (let i = 1; i < seriesData.length; i++) {
+                if (!card.axisEnabled[i - 1]) continue;
+                const arr = seriesData[i];
+                for (let j = 0; j < arr.length; j++) {
+                    const v = arr[j];
+                    if (!isFinite(v)) continue;
+                    if (v < yMin) yMin = v;
+                    if (v > yMax) yMax = v;
+                }
+            }
+            if (isFinite(yMin) && isFinite(yMax)) {
+                const y = ensureYRange(yMin, yMax);
+                card.state.yMin = y.min;
+                card.state.yMax = y.max;
+            } else {
+                card.state.yMin = -1;
+                card.state.yMax = 1;
+            }
+        }
+        const yFinal = ensureYRange(card.state.yMin, card.state.yMax);
+        card.state.yMin = yFinal.min;
+        card.state.yMax = yFinal.max;
+        card.plot.setScale('y', {min: card.state.yMin, max: card.state.yMax});
     }
 
-    // ===== Plot 控件（添加/移除序列） =====
-    const plotTypeSel = document.getElementById('plotSelectType');
-    const plotSensorSel = document.getElementById('plotSelectSensor');
-    const plotAxisSel = document.getElementById('plotSelectAxis');
-    const addSeriesBtn = document.getElementById('addSeriesBtn');
-    const clearSeriesBtn = document.getElementById('clearSeriesBtn');
-    const seriesListEl = document.getElementById('seriesList');
+    function refreshAllPlotCards() {
+        plotCards.forEach(card => {
+            if (!card.state.paused) refreshPlotCard(card);
+        });
+    }
+
+    function removePlotCard(cardId) {
+        const idx = plotCards.findIndex(c => c.id === cardId);
+        if (idx < 0) return;
+        const card = plotCards[idx];
+        if (card.plot) card.plot.destroy();
+        card.root.remove();
+        plotCards.splice(idx, 1);
+        updatePlotEmpty();
+    }
+
+    function clearPlotCards() {
+        plotCards.forEach(card => {
+            if (card.plot) card.plot.destroy();
+            card.root.remove();
+        });
+        plotCards = [];
+        updatePlotEmpty();
+    }
+
+    function createPlotCard(type, sensor, options = {}) {
+        const silent = options.silent === true;
+        if (type === 'rotation_matrix') {
+            if (!silent) showNotification('旋转矩阵不支持添加图卡', 'warning');
+            return;
+        }
+        const existed = plotCards.find(c => c.type === type && c.sensor === sensor);
+        if (existed) {
+            if (!silent) showNotification('该图卡已存在，已自动去重', 'warning');
+            existed.root.scrollIntoView({behavior: 'smooth', block: 'center'});
+            return;
+        }
+
+        const dims = getGroupDims(type);
+        const groupName = DATA_GROUPS.find(g => g.key === type)?.name || type;
+        const id = plotCardSeq++;
+
+        const root = document.createElement('div');
+        root.className = 'card plot-card';
+        root.innerHTML = `
+            <div class="plot-card-head">
+                <div>
+                    <div class="plot-card-title">${groupName} · sensor${sensor}</div>
+                    <div class="plot-card-sub">${type}@s${sensor}</div>
+                </div>
+                <div class="plot-card-tools">
+                    <button class="btn" data-role="pause">暂停</button>
+                    <button class="btn" data-role="autoX">适应X轴</button>
+                    <button class="btn" data-role="remove">移除</button>
+                </div>
+            </div>
+            <div class="axis-toggles" data-role="axes"></div>
+            <div class="uplot plot-chart" data-role="chart"></div>
+        `;
+
+        const chartEl = root.querySelector('[data-role="chart"]');
+        const axesEl = root.querySelector('[data-role="axes"]');
+        const pauseBtn = root.querySelector('[data-role="pause"]');
+        const autoXBtn = root.querySelector('[data-role="autoX"]');
+        const removeBtn = root.querySelector('[data-role="remove"]');
+
+        const axisEnabled = Array.from({length: dims}, () => true);
+        for (let axis = 0; axis < dims; axis++) {
+            const row = document.createElement('label');
+            row.className = 'axis-toggle-item';
+            row.innerHTML = `
+                <span class="axis-dot" style="background:${PLOT_COLORS[axis % PLOT_COLORS.length]}"></span>
+                <input type="checkbox" checked data-axis="${axis}">
+                <span>axis${axis}</span>
+            `;
+            const ck = row.querySelector('input');
+            ck.addEventListener('change', () => {
+                axisEnabled[axis] = ck.checked;
+                refreshPlotCard(card);
+            });
+            axesEl.appendChild(row);
+        }
+
+        const card = {
+            id,
+            type,
+            sensor,
+            dims,
+            axisEnabled,
+            root,
+            chartEl,
+            pauseBtn,
+            autoXBtn,
+            removeBtn,
+            plot: null,
+            state: {
+                paused: false,
+                autoX: true,
+                autoY: true,
+                xRangeSec: 5,
+                xOffsetSec: 0,
+                yMin: -1,
+                yMax: 1,
+                dragStart: null
+            }
+        };
+
+        pauseBtn.addEventListener('click', () => {
+            card.state.paused = !card.state.paused;
+            updateCardButtons(card);
+            if (!card.state.paused) refreshPlotCard(card);
+        });
+        autoXBtn.addEventListener('click', () => {
+            if (card.state.autoX) {
+                const history = getHistorySeconds();
+                const xWindow = getXWindowByState(card.state, history);
+                card.state.xRangeSec = Math.max(0.1, xWindow.xMax - xWindow.xMin);
+                card.state.xOffsetSec = Math.max(0, -xWindow.xMax);
+                card.state.autoX = false;
+            } else {
+                card.state.autoX = true;
+            }
+            updateCardButtons(card);
+            refreshPlotCard(card);
+        });
+        removeBtn.addEventListener('click', () => removePlotCard(card.id));
+
+        chartEl.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const multiplier = Math.pow(2, e.deltaY / 250);
+            zoomCardX(card, multiplier);
+            refreshPlotCard(card);
+        }, {passive: false});
+
+        chartEl.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            draggingCardId = card.id;
+            card.state.dragStart = {
+                x: e.clientX,
+                y: e.clientY,
+                xOffsetSec: card.state.xOffsetSec,
+                yMin: card.state.yMin,
+                yMax: card.state.yMax
+            };
+        });
+
+        chartEl.addEventListener('mousemove', (e) => {
+            if (draggingCardId !== card.id || !card.state.dragStart) return;
+            const rect = chartEl.getBoundingClientRect();
+            const w = Math.max(1, rect.width);
+            const h = Math.max(1, rect.height);
+            const dx = e.clientX - card.state.dragStart.x;
+            const dy = e.clientY - card.state.dragStart.y;
+
+            if (!card.state.autoX) {
+                const history = getHistorySeconds();
+                const maxOffset = Math.max(0, history - card.state.xRangeSec);
+                const deltaXSec = (dx / w) * card.state.xRangeSec;
+                card.state.xOffsetSec = Math.max(0, Math.min(maxOffset, card.state.dragStart.xOffsetSec + deltaXSec));
+            }
+            if (!card.state.autoY) {
+                const yRange = Math.max(1e-6, card.state.dragStart.yMax - card.state.dragStart.yMin);
+                const deltaY = (dy / h) * yRange;
+                card.state.yMin = card.state.dragStart.yMin + deltaY;
+                card.state.yMax = card.state.dragStart.yMax + deltaY;
+            }
+            refreshPlotCard(card);
+        });
+
+        chartEl.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            scaleToFitCard(card);
+        });
+
+        chartEl.addEventListener('mouseleave', () => {
+            if (draggingCardId === card.id) {
+                draggingCardId = null;
+                card.state.dragStart = null;
+            }
+        });
+
+        plotCardsEl.appendChild(root);
+        createCardPlot(card, Array.from({length: dims + 1}, () => []));
+        updateCardButtons(card);
+        plotCards.push(card);
+        updatePlotEmpty();
+        refreshPlotCard(card);
+        if (!silent) showNotification('已创建图卡', 'success');
+    }
+
+    window.addEventListener('mouseup', () => {
+        draggingCardId = null;
+        plotCards.forEach(card => card.state.dragStart = null);
+    });
+
+    window.addEventListener('resize', () => {
+        plotCards.forEach(card => {
+            if (card.plot) card.plot.setSize({width: card.chartEl.clientWidth || 600, height: 220});
+            refreshPlotCard(card);
+        });
+    });
+
+    window.addEventListener('plot-theme-changed', () => {
+        plotCards.forEach(card => {
+            createCardPlot(card, Array.from({length: card.dims + 1}, () => []));
+            refreshPlotCard(card);
+        });
+    });
 
     // 填充下拉项
     function initCustomSelect(selectElement, options) {
@@ -1220,125 +1544,43 @@
         valueDisplay.textContent = displayText;
     }
 
-    initCustomSelect(plotTypeSel, DATA_GROUPS.map(g => ({key: g.key, name: g.name})));
+    const plotTypeOptions = DATA_GROUPS
+        .filter(g => g.key !== 'rotation_matrix')
+        .map(g => ({key: g.key, name: g.name}));
+    initCustomSelect(plotTypeSel, plotTypeOptions);
     const sensorOptions = [];
     for (let i = 0; i < BMI088_NUM; i++) {
         sensorOptions.push({key: i.toString(), name: 'sensor' + i});
     }
     initCustomSelect(plotSensorSel, sensorOptions);
-    initCustomSelect(plotAxisSel, []);
+    updateCustomSelect('plotSelectType', 'raw_accel');
+    updateCustomSelect('plotSelectSensor', '0');
+    updatePlotEmpty();
 
-    function refreshAxisOptions() {
-        const sel = getSelectValue(plotTypeSel);
-        const dims = DATA_GROUPS.find(g => g.key === sel.toString())?.dims || 1;
-        const trigger = plotAxisSel.querySelector('.select-trigger');
-        const valueDisplay = plotAxisSel.querySelector('.select-value');
-        const optionsContainer = plotAxisSel.querySelector('.select-options');
-
-        const currentDisplayText = valueDisplay.textContent;
-        let valueToPreserve = null;
-        if (currentDisplayText !== '请选择') {
-            valueToPreserve = currentDisplayText;
-        }
-
-        optionsContainer.innerHTML = '';// 清空现有选项
-        let foundOldValueInNewOptions = false;
-        for (let a = 0; a < dims; a++) {
-            // 添加选项
-            const optionEl = document.createElement('div');
-            optionEl.className = 'select-option';
-            optionEl.textContent = 'axis' + a;
-            optionEl.dataset.value = a.toString();
-
-            // 点击选项事件
-            optionEl.addEventListener('click', () => {
-                valueDisplay.textContent = 'axis' + a;// 更新显示值
-                plotAxisSel.querySelectorAll('.select-option').forEach(opt => {
-                    opt.classList.remove('selected');
-                });// 更新选中状态
-                optionEl.classList.add('selected');
-
-                // 关闭下拉框
-                trigger.classList.remove('active');
-                optionsContainer.classList.remove('show');
-
-                // 触发 change 事件（兼容原有逻辑）
-                const event = new Event('change', {bubbles: true});
-                plotAxisSel.dispatchEvent(event);
-            });
-            optionsContainer.appendChild(optionEl);
-
-            if (valueToPreserve && valueToPreserve === 'axis' + a) {
-                optionEl.classList.add('selected');// 那么就选中这个新选项
-                valueDisplay.textContent = 'axis' + a;// 并且将显示文本更新为这个选项的文本（也就是保留旧值）
-                foundOldValueInNewOptions = true;// 标记为已找到，防止循环结束后被重置
-            }
-        }
-
-        if (valueToPreserve && !foundOldValueInNewOptions) { // 只有当存在需要保留的旧值，但在新选项中又没找到时，才执行重置
-            valueDisplay.textContent = '请选择';
-            // 确保所有选项都没有 selected 类（虽然循环中没加，但这里是双重保险）
-            plotAxisSel.querySelectorAll('.select-option').forEach(opt => {
-                opt.classList.remove('selected');
-            });
-        }
-
-    }
-
-    plotTypeSel.addEventListener('change', refreshAxisOptions);
-    refreshAxisOptions();
-
-    function addSeries() {
+    addPlotCardBtn.addEventListener('click', () => {
         const type = getSelectValue(plotTypeSel);
-        const s = parseInt(getSelectValue(plotSensorSel));
-        const a = parseInt(getSelectValue(plotAxisSel));
-        const key = `${type}_${s}_${a}`;
-        if (type === '') {
+        const sensor = parseInt(getSelectValue(plotSensorSel));
+        if (!type) {
             showNotification("请选择数据类型！", 'error');
             return;
         }
-        if (isNaN(s)) {
+        if (isNaN(sensor)) {
             showNotification("请选择传感器序号！", 'error');
             return;
         }
-        if (isNaN(a)) {
-            showNotification("请选择数据轴！", 'error');
-            return;
-        }
-        if (visibleSeries.find(x => x.key === key)) {
-            showNotification("该数据已存在", 'warning');
-            return;
-        } // 已存在
-        visibleSeries.push({key, label: `${type}@s${s}#${a}`});
-        renderSeriesList();
-        refreshMainPlot();
-    }
-
-    addSeriesBtn.addEventListener('click', addSeries);
-    clearSeriesBtn.addEventListener('click', () => {
-        visibleSeries = [];
-        renderSeriesList();
-        refreshMainPlot();
+        createPlotCard(type, sensor);
+        
     });
 
-    function renderSeriesList() {
-        seriesListEl.innerHTML = '';
-        visibleSeries.forEach((s, idx) => {
-            const d = document.createElement('div');
-            d.style.display = 'flex';
-            d.style.justifyContent = 'space-between';
-            d.style.padding = '6px';
-            d.style.borderBottom = '1px solid rgba(0,0,0,0.04)';
-            d.innerHTML = `<div style="font-family:var(--mono)">${s.label}</div><div><button class="btn" data-idx="${idx}">移除</button></div>`;
-            seriesListEl.appendChild(d);
-        });
-        seriesListEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-            const i = parseInt(b.dataset.idx);
-            visibleSeries.splice(i, 1);
-            renderSeriesList();
-            refreshMainPlot();
-        }));
-    }
+    clearPlotCardsBtn.addEventListener('click', () => {
+        clearPlotCards();
+        showNotification('已清空图卡', 'success');
+    });
+
+    // 默认图卡：sensor0 的原始加速度、地球加速度、位移、欧拉角
+    ['raw_accel', 'earth_accel', 'displacement', 'eular'].forEach(type => {
+        createPlotCard(type, 0, {silent: true});
+    });
 
     // ===== 设置页面：模式/频率 下拉填充 =====
     const modeSelects = ['tcp_mode', 'udp_mode', 'usb_mode', 'serial_mode', 'bluetooth_mode'];
@@ -1654,24 +1896,24 @@
         e.preventDefault();
         passwordInput.type = 'password';
     });
-    
+
     // 配对WIFI密码显示/隐藏
     const pairPasswordInput = document.getElementById('pair-wifi-password');
     const togglePairPassword = document.getElementById('toggle-pair-password');
-    togglePairPassword.addEventListener('mousedown', function () {
+    togglePairPassword.addEventListener('mousedown', function() {
         pairPasswordInput.type = 'text';
     });
-    togglePairPassword.addEventListener('mouseup', function () {
+    togglePairPassword.addEventListener('mouseup', function() {
         pairPasswordInput.type = 'password';
     });
-    togglePairPassword.addEventListener('mouseleave', function () {
+    togglePairPassword.addEventListener('mouseleave', function() {
         pairPasswordInput.type = 'password';
     });
-    togglePairPassword.addEventListener('touchstart', function (e) {
+    togglePairPassword.addEventListener('touchstart', function(e) {
         e.preventDefault();
         pairPasswordInput.type = 'text';
     });
-    togglePairPassword.addEventListener('touchend', function (e) {
+    togglePairPassword.addEventListener('touchend', function(e) {
         e.preventDefault();
         pairPasswordInput.type = 'password';
     });
@@ -1697,10 +1939,12 @@
             showNotification('WiFi名称是否合法', 'error');
             return;
         }
+
         if (!pairUuid.validity.valid) {
             showNotification('配对WiFi名称是否合法', 'error');
             return;
         }
+
         if (!tcpPort.validity.valid) {
             showNotification('TCP端口是否合法', 'error');
             return;
@@ -1722,6 +1966,8 @@
         const obj = {
             uuid: uuid.value.trim(),
             pass: pass.value.trim(),
+            pair_uuid: pairUuid.value.trim(),
+            pair_pass: pairPass.value.trim(),
             tcp_port: tcpPort.value.trim(),
             udp_host_ip: udpHostIp.value.trim(),
             udp_host_port: udpHostPort.value.trim(),
@@ -1797,13 +2043,14 @@
 
     // ===== 连接状态显示 helper =====
     function updateConnUI() {
-        // 检查是否有数据更新（超过2秒没有收到数据则认为断开）
-        if (connected && (Date.now() - last_receive_time > 2000)) {
+        if (connected && (Date.now() - last_receive_time > 2000))
+        {
             connected = false;
-        }
+        } // 检查WebSocket连接状态
         connDot.classList.toggle('connect', connected);
         connDot.classList.toggle('off', !connected);
         connStatus.textContent = connected ? '已连接' : '未连接';
+
     }
 
     setInterval(updateConnUI, 600);

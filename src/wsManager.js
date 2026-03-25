@@ -8,6 +8,29 @@ const iconv = require('iconv-lite');
 const { Console } = require('console');
 const BMI088_NUM = 4; // Number of BMI088 IMUs connected
 
+function previewFrameData(data, limit = 128) {
+  if (data == null) return { kind: 'null', length: 0, text: '' };
+  if (typeof data === 'string') {
+    return {
+      kind: 'string',
+      length: data.length,
+      text: data.slice(0, limit),
+    };
+  }
+
+  const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const hex = buffer.subarray(0, limit).toString('hex').match(/.{1,2}/g)?.join(' ') || '';
+  const utf8 = buffer.toString('utf8', 0, Math.min(buffer.length, limit));
+  const latin1 = buffer.toString('latin1', 0, Math.min(buffer.length, limit));
+  return {
+    kind: Buffer.isBuffer(data) ? 'buffer' : data?.constructor?.name || 'binary',
+    length: buffer.length,
+    hex,
+    utf8,
+    latin1,
+  };
+}
+
 function cidrToRange(base, cidr) {
   const parts = base.split('.').map(Number);
   const hostBits = 32 - cidr;
@@ -87,9 +110,10 @@ class WSManager extends EventEmitter {
             this.emit('scan-result', { ip, status: 'green' });
             const ws = probeRes.ws;
             // install events
-            ws.on('message', (data) => {
+            ws.on('message', (data, isBinary) => {
               try {
-                const msg = JSON.parse(data.toString());
+                const rawText = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
+                const msg = JSON.parse(rawText);
                 // emit ws message
                 // connSettings handling
                 if (msg.ts <= 3){ }  // 设置信息，轨道信息，wifi设置信息，系统信息
@@ -206,14 +230,31 @@ class WSManager extends EventEmitter {
 
                 }
                 this.conns[ip].lastMsg = msg;
+                this.conns[ip].lastRawPreview = previewFrameData(data);
                 this.emit('ws-message', { ip, msg });
               } catch (e) {
-                // non-json or parse error: ignore
+                console.warn('[WS DEBUG] message parse failed', ip, {
+                  error: e && e.message,
+                  isBinary,
+                  preview: previewFrameData(data),
+                });
               }
               
             });
             ws.on('close', () => { if (this.conns[ip]) this.conns[ip].state = 'closed'; });
-            ws.on('error', (e) => { console.warn('ws error', ip, e); });
+            ws.on('error', (e) => {
+              console.warn('[WS ERROR]', ip, {
+                code: e && e.code,
+                message: e && e.message,
+                status: this.conns[ip] && this.conns[ip].state,
+                remoteAddress: ws && ws._socket ? ws._socket.remoteAddress : undefined,
+                remotePort: ws && ws._socket ? ws._socket.remotePort : undefined,
+                lastRawPreview: this.conns[ip] && this.conns[ip].lastRawPreview,
+              });
+              if (e && e.code === 'WS_ERR_INVALID_UTF8') {
+                console.warn('[WS DEBUG] invalid utf8 frame details', ip, this.conns[ip] && this.conns[ip].lastRawPreview);
+              }
+            });
             this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
           } else {
             // timeout/no-ws
@@ -239,7 +280,7 @@ class WSManager extends EventEmitter {
 
   tryConnectProbe(ip, timeout = 800) {
     return new Promise((resolve) => {
-      const ws = new WebSocket(`http://${ip}/ws`, { handshakeTimeout: timeout });
+      const ws = new WebSocket(`http://${ip}/ws`, { handshakeTimeout: timeout, skipUTF8Validation: true });
       let settled = false;
       ws.on('open', () => {
         settled = true;
@@ -257,16 +298,18 @@ class WSManager extends EventEmitter {
       if (this.conns[ip] && this.conns[ip].ws && this.conns[ip].ws.readyState === WebSocket.OPEN) {
         resolve({ ok: true, note: 'already' }); return;
       }
-      const ws = new WebSocket('http://' + ip + '/ws');
+      const ws = new WebSocket('http://' + ip + '/ws', { skipUTF8Validation: true });
       ws.on('open', () => {
         this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
         try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); console.log('Sent', JSON.stringify({ cmd: 'getConnSettings' }), 'to', ip); } catch (e) { }
         resolve({ ok: true });
       });
-      ws.on('message', (data) => {
+      ws.on('message', (data, isBinary) => {
         try {
-          const msg = JSON.parse(data.toString());
+          const rawText = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
+          const msg = JSON.parse(rawText);
           this.conns[ip].lastMsg = msg;
+          this.conns[ip].lastRawPreview = previewFrameData(data);
           this.emit('ws-message', { ip, msg });
           if (msg.ts === 2 || msg.cmd === 'connSettings' || msg.getConnSettings) {
             const cs = {
@@ -292,10 +335,23 @@ class WSManager extends EventEmitter {
             // other messages
           }
         }
-        catch (e) { }
+        catch (e) {
+          console.warn('[WS DEBUG] connect() message parse failed', ip, {
+            error: e && e.message,
+            isBinary,
+            preview: previewFrameData(data),
+          });
+        }
       });
       ws.on('close', () => { if (this.conns[ip]) this.conns[ip].state = 'closed'; });
-      ws.on('error', (e) => { resolve({ ok: false, error: String(e) }); });
+      ws.on('error', (e) => {
+        console.warn('[WS ERROR] connect()', ip, {
+          code: e && e.code,
+          message: e && e.message,
+          lastRawPreview: this.conns[ip] && this.conns[ip].lastRawPreview,
+        });
+        resolve({ ok: false, error: String(e) });
+      });
     });
   }
 

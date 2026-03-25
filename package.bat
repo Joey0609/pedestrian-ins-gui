@@ -1,5 +1,5 @@
 @echo off
-call electron-packager . WalkingJourney --platform=win32 --arch=x64 --overwrite --ignore="^/\.vscode($|/)" --ignore="^/\.gitignore$" --ignore="^/package-bat\.bat$" --ignore="^/README\.md$" --ignore="^/package\.bat$"
+call electron-packager . WalkingJourney --platform=win32 --arch=x64 --overwrite --ignore="^/\.vscode($|/)" --ignore="^/\.gitignore$" --ignore="^/package-bat\.bat$" --ignore="^/README\.md$" --ignore="^/package\.bat$" --ignore="^/\versions($|/)"
 echo "打包完成"
 del "WalkingJourney-win32-x64\LICENSE"
 echo "删除 LICENSE 文件完成"
@@ -20,5 +20,5 @@ for /f "tokens=2 delims=:," %%v in ('findstr /i "\"version\"" package.json') do 
 )
 set "ver=%ver: =%"
 set "ver=%ver:\"=%"
-ren "WalkingJourney-win32-x64" "WalkingJourney-v%ver%"
+ren "WalkingJourney-win32-x64" "versions/WalkingJourney-v%ver%"
 echo "重命名为 WalkingJourney-v%ver% 完成"
