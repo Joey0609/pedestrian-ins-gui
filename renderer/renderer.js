@@ -96,6 +96,7 @@ let modalContent = null;
 let hostIp = null;
 let scanAbortRequested = false;
 let currentPage = 'attitude'; // 'attitude', 'track', or device IP
+const SERIAL_SCAN_MAX_CONCURRENCY = 8;
 
 // Recording data storage
 let recordingData = {}; // { ip: { sensorIndex: [rows...] } }
@@ -1243,13 +1244,24 @@ async function runSerialScanAll() {
   updateSerialScanProgress();
 
   const paths = Object.keys(scanState.rows);
-  // 批量并发执行所有串口探测（UI 会在每个探测完成时更新）
-  const promises = paths.map(path => {
-    return scanSingleSerialPort(path, false).catch(e => {
-      console.warn('scanSingleSerialPort error', path, e);
-    });
+  const maxParallel = SERIAL_SCAN_MAX_CONCURRENCY;
+  let cursor = 0;
+
+  const workers = Array.from({ length: Math.min(maxParallel, paths.length) }, async () => {
+    while (cursor < paths.length) {
+      const index = cursor;
+      cursor += 1;
+      const path = paths[index];
+      if (!scanState || scanState.type !== 'serial') return;
+      try {
+        await scanSingleSerialPort(path, false);
+      } catch (e) {
+        console.warn('scanSingleSerialPort error', path, e);
+      }
+    }
   });
-  await Promise.all(promises);
+
+  await Promise.all(workers);
   if (scanState && scanState.type === 'serial') {
     scanState.running = false;
   }
@@ -1263,7 +1275,7 @@ async function showSerialScanModal() {
         <h3>串口设备扫描</h3>
         <button id="closeSerialScanX" class="secondary">关闭</button>
       </div>
-      <div class="serial-modal-sub">自动打开全部串口并发送 getDeviceInfos，500ms 内返回有效信息则识别为设备</div>
+      <div class="serial-modal-sub">自动扫描全部串口，最多同时并发 ${SERIAL_SCAN_MAX_CONCURRENCY} 个；发送 getDeviceInfos，500ms 内返回有效信息则识别为设备</div>
       <div id="serialScanList" class="serial-list"></div>
       <div class="serial-modal-footer">
         <div id="serialScanProgress" class="serial-progress">正在获取串口列表...</div>

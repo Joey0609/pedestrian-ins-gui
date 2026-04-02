@@ -236,22 +236,63 @@ class WSManager extends EventEmitter {
   }
 
   async listSerialPorts() {
-    if (!SerialPort) {
-      return [];
+    const map = new Map();
+
+    if (SerialPort) {
+      try {
+        const ports = await SerialPort.list();
+        ports.forEach((p) => {
+          const key = String(p.path || '').toUpperCase();
+          if (!key) return;
+          map.set(key, {
+            path: p.path,
+            manufacturer: p.manufacturer || '',
+            serialNumber: p.serialNumber || '',
+            friendlyName: p.friendlyName || '',
+            vendorId: p.vendorId || '',
+            productId: p.productId || '',
+          });
+        });
+      } catch (e) {
+        // ignore and fallback to mode list below
+      }
     }
+
+    // Windows 上补充使用 `mode` 枚举，避免某些虚拟串口未出现在 serialport.list()。
     try {
-      const ports = await SerialPort.list();
-      return ports.map((p) => ({
-        path: p.path,
-        manufacturer: p.manufacturer || '',
-        serialNumber: p.serialNumber || '',
-        friendlyName: p.friendlyName || '',
-        vendorId: p.vendorId || '',
-        productId: p.productId || '',
-      }));
+      const out = child_process.execSync('cmd /c mode', { encoding: 'buffer', windowsHide: true, timeout: 4000 });
+      const txt = iconv.decode(out, 'cp936');
+      const re = /\b(COM\d+):/gi;
+      let m;
+      while ((m = re.exec(txt)) !== null) {
+        const com = (m[1] || '').toUpperCase();
+        if (!com) continue;
+        if (!map.has(com)) {
+          map.set(com, {
+            path: com,
+            manufacturer: '',
+            serialNumber: '',
+            friendlyName: 'mode-detected',
+            vendorId: '',
+            productId: '',
+          });
+        }
+      }
     } catch (e) {
-      return [];
+      // ignore mode fallback failures
     }
+
+    const list = Array.from(map.values());
+    list.sort((a, b) => {
+      const ma = String(a.path || '').match(/^COM(\d+)$/i);
+      const mb = String(b.path || '').match(/^COM(\d+)$/i);
+      const na = ma ? parseInt(ma[1], 10) : Number.MAX_SAFE_INTEGER;
+      const nb = mb ? parseInt(mb[1], 10) : Number.MAX_SAFE_INTEGER;
+      if (na !== nb) return na - nb;
+      return String(a.path || '').localeCompare(String(b.path || ''));
+    });
+
+    return list;
   }
 
   async _probeSerialAtBaud({ path, baudRate, timeoutMs, keepOpen }) {
