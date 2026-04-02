@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getSubnets: () => ipcRenderer.invoke('getSubnets'),
+  listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
+  probeSerialPort: (opts) => ipcRenderer.invoke('probe-serial-port', opts),
   // scanPorts removed per requirement (not exposed)
   scanIPs: (opts) => ipcRenderer.invoke('scan-ips', opts),
   connectWS: (opts) => ipcRenderer.invoke('connect-ws', opts),

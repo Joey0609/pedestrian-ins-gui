@@ -9,6 +9,16 @@ let wsMgr;
 let lastCpuSample = process.cpuUsage();
 let lastCpuSampleAt = process.hrtime.bigint();
 
+function safeSendToRenderer(channel, payload) {
+  try {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    if (!mainWin.webContents || mainWin.webContents.isDestroyed()) return;
+    mainWin.webContents.send(channel, payload);
+  } catch (e) {
+    console.warn(`[main] safeSendToRenderer failed on ${channel}:`, e && e.message ? e.message : e);
+  }
+}
+
 function getRuntimeStats() {
   const now = process.hrtime.bigint();
   const cpu = process.cpuUsage();
@@ -53,21 +63,29 @@ app.whenReady().then(() => {
   wsMgr = new WSManager();
 
   wsMgr.on('scan-progress', (data) => {
-    if (mainWin && mainWin.webContents) mainWin.webContents.send('ws-scan-progress', data);
+    safeSendToRenderer('ws-scan-progress', data);
   });
   wsMgr.on('scan-result', (data) => {
-    if (mainWin && mainWin.webContents) mainWin.webContents.send('ws-scan-result', data);
+    safeSendToRenderer('ws-scan-result', data);
   });
 
   // forward ws messages (IMU / device info) to renderer
   wsMgr.on('ws-message', (data) => {
-    if (mainWin && mainWin.webContents) mainWin.webContents.send('ws-message', data);
+    safeSendToRenderer('ws-message', data);
   });
 
 
   // IPCs
   ipcMain.handle('getSubnets', async () => {
     return wsMgr.getLocalSubnets();
+  });
+
+  ipcMain.handle('list-serial-ports', async () => {
+    return await wsMgr.listSerialPorts();
+  });
+
+  ipcMain.handle('probe-serial-port', async (event, args) => {
+    return await wsMgr.probeSerialPort(args || {});
   });
 
   ipcMain.handle('scan-ips', async (event, args) => {

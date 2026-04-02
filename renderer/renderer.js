@@ -183,6 +183,17 @@ const COLORS = {
   black: '#444444'
 };
 
+function isIPv4Address(text) {
+  if (typeof text !== 'string') return false;
+  return /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/.test(text.trim());
+}
+
+function getTransportTypeById(id) {
+  const conn = connections.find((c) => c.ip === id);
+  if (conn && conn.type) return conn.type;
+  return isIPv4Address(id) ? 'ws' : 'serial';
+}
+
 // ---------------- Tab Slider Animation ----------------
 function updateTabSlider() {
   const container = document.querySelector('.tab-container');
@@ -249,6 +260,10 @@ document.getElementById('btn-scan-ips').addEventListener('click', async () => {
     console.error('getSubnets failed', e);
     alert('获取子网失败: ' + e.message);
   }
+});
+
+document.getElementById('btn-scan-serial').addEventListener('click', async () => {
+  showSerialScanModal();
 });
 
 // other topbar buttons (unchanged behaviour)
@@ -349,10 +364,11 @@ async function disconnectDevice(ip) {
     
     // Remove from tracks
     if (tracks[ip]) {
+      const oldColor = trackColors[ip];
+      if (oldColor) usedColors.delete(oldColor);
       delete tracks[ip];
       delete trackColors[ip];
       delete trackVisible[ip];
-      usedColors.delete(trackColors[ip]);
       if (throttledUpdateLegend) throttledUpdateLegend();
       if (typeof window.drawTracks === 'function') window.drawTracks();
     }
@@ -427,6 +443,7 @@ function switchToPage(page) {
 function showDevicePage(ip) {
   const container = document.getElementById('device-pages-container');
   if (!container) return;
+  const isWebDevice = isIPv4Address(ip);
   
   // Check if page already exists
   let devicePage = container.querySelector(`[data-device-ip="${ip}"]`);
@@ -440,10 +457,10 @@ function showDevicePage(ip) {
       <div class="device-page-header">
         <div class="device-page-title">
           <h3>设备详情 - ${ip}</h3>
-          <span class="device-status">已连接</span>
+          <span class="device-status">${isWebDevice ? 'WebSocket 已连接' : '串口已连接'}</span>
         </div>
         <div class="device-page-actions">
-          <button class="btn-open-external" title="在浏览器中打开">
+          <button class="btn-open-external" title="在浏览器中打开" ${isWebDevice ? '' : 'style="display:none"'}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
               <polyline points="15 3 21 3 21 9"/>
@@ -462,10 +479,12 @@ function showDevicePage(ip) {
     devicePage.querySelector('.btn-back').addEventListener('click', () => {
       switchToPage('attitude');
     });
-    
-    devicePage.querySelector('.btn-open-external').addEventListener('click', () => {
-      electronAPI.openUrl(`http://${ip}/`);
-    });
+
+    if (isWebDevice) {
+      devicePage.querySelector('.btn-open-external').addEventListener('click', () => {
+        electronAPI.openUrl(`http://${ip}/`);
+      });
+    }
     
     container.appendChild(devicePage);
   }
@@ -559,19 +578,19 @@ electronAPI.onWSMessage((msg) => {
   // find connection and attach lastMsg so UI grid updates
   const idx = connections.findIndex(c => c.ip === msg.ip);
   let isNew = false;
+  const sourceType = msg.source || getTransportTypeById(msg.ip);
   if (idx >= 0) {
     connections[idx].lastMsg = msg.msg;
+    if (!connections[idx].type) connections[idx].type = sourceType;
   } else {
     // push if not present
-    connections.push({ ip: msg.ip, lastMsg: msg.msg, connSettings: msg.connSettings || null });
+    connections.push({ ip: msg.ip, lastMsg: msg.msg, connSettings: msg.connSettings || null, type: sourceType });
     isNew = true;
     // Add device tab for new connection
-    addDeviceTab(msg.ip);
+    addDeviceTab(msg.ip, sourceType);
     updateConnectionCount();
   }
   // if IMU normal data, push to connection and will be used for attitude rendering
-  // update grid
-  layoutGrid(isNew);
   let ip = msg.ip;
   let data = msg.msg;
 
@@ -650,9 +669,11 @@ electronAPI.onWSMessage((msg) => {
       Object.assign(data, imuData);
     } catch (error) {
       console.error("Base64 decoding failed:", error);
-      return;
     }
   }
+
+  // 在数据解码/合并之后再更新网格，确保姿态模型读取到最新 quat
+  layoutGrid(isNew);
   
   // Record data if recording is active
   if (recording && data.timestamp) {
@@ -699,12 +720,14 @@ electronAPI.onWSMessage((msg) => {
 });
 
 // Add device tab to bottom bar
-function addDeviceTab(ip) {
+function addDeviceTab(ip, type = null) {
   const deviceTabs = document.getElementById('device-tabs');
   if (!deviceTabs) return;
   
   // Check if tab already exists
   if (deviceTabs.querySelector(`[data-ip="${ip}"]`)) return;
+  const transport = type || getTransportTypeById(ip);
+  const tag = transport === 'serial' ? '串口' : 'IP';
   
   const tab = document.createElement('button');
   tab.className = 'device-tab animate-slide-in';
@@ -712,6 +735,7 @@ function addDeviceTab(ip) {
   tab.innerHTML = `
     <span class="status-dot"></span>
     <span>${ip}</span>
+    <span class="device-transport-tag">${tag}</span>
     <span class="close-btn" title="断开连接">×</span>
   `;
   
@@ -731,7 +755,25 @@ function addDeviceTab(ip) {
 let oldLength = 0;
 async function listConns() {
   const list = await electronAPI.listConnections();
-  connections = list;
+  connections = (list || []).map((c) => ({ ...c, type: c.type || getTransportTypeById(c.ip) }));
+
+  const tabsRoot = document.getElementById('device-tabs');
+  if (tabsRoot) {
+    tabsRoot.querySelectorAll('.device-tab').forEach((tab) => {
+      const ip = tab.dataset.ip;
+      if (!connections.some((c) => c.ip === ip)) {
+        tab.remove();
+        removeDevicePage(ip);
+      }
+    });
+    connections.forEach((conn) => {
+      if (!tabsRoot.querySelector(`[data-ip="${conn.ip}"]`)) {
+        addDeviceTab(conn.ip, conn.type);
+      }
+    });
+  }
+
+  updateConnectionCount();
   if (oldLength !== connections.length) {
     oldLength = connections.length;
     layoutGrid(true);
@@ -765,16 +807,17 @@ function layoutGrid(forceRebuild = false) {
       const conn = connections[i];
       const card = document.createElement('div'); card.className = 'card'; card.style.background = '#fff'; card.style.borderRadius = '8px'; card.style.padding = '8px'; card.style.boxShadow = '0 2px 6px rgba(0,0,0,0.06)'; card.style.height = '100%';
       const title = document.createElement('div'); title.textContent = conn ? conn.ip : ('设备 ' + (i + 1)); title.style.fontWeight = '700'; 
-      // if (conn && conn.ip) {
+      if (conn && isIPv4Address(conn.ip)) {
         title.style.cursor = 'pointer';
-        // title.style.textDecoration = 'underline';
         title.style.color = '#2b6ef6';
         title.addEventListener('click', (e) => {
           const url = `http://${conn.ip}`;
           e.preventDefault();
           electronAPI.openUrl(url);
         });
-      // }
+      } else {
+        title.style.color = '#334155';
+      }
       card.appendChild(title);
       const threeDiv = document.createElement('div'); threeDiv.style.flex = '1'; threeDiv.style.minHeight = '0'; card.appendChild(threeDiv);
       grid.appendChild(card);
@@ -1087,6 +1130,203 @@ function addScanButtonsToModal() {
   modalContent.appendChild(btnsWrap);
 }
 
+function updateSerialScanProgress() {
+  if (!scanState || scanState.type !== 'serial' || !modalContent) return;
+  const prog = modalContent.querySelector('#serialScanProgress');
+  if (!prog) return;
+  const total = scanState.total || 0;
+  const done = scanState.completed || 0;
+  prog.textContent = total > 0 ? `已扫描 ${done}/${total}` : '未发现串口设备';
+}
+
+function setSerialRowStatus(path, status, detail, result) {
+  if (!scanState || scanState.type !== 'serial') return;
+  const row = scanState.rows[path];
+  if (!row) return;
+
+  row.statusBadge.textContent = status;
+  row.detail.textContent = detail || '';
+  row.element.classList.remove('status-scanning', 'status-connected', 'status-failed', 'status-non-esp');
+
+  if (result && result.status === 'connected') {
+    row.element.classList.add('status-connected');
+    row.actions.innerHTML = '<span class="serial-row-ok">已连接</span>';
+    return;
+  }
+
+  if (result && result.status === 'open-failed') {
+    row.element.classList.add('status-failed');
+    row.actions.innerHTML = '';
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'serial-retry-btn';
+    retryBtn.textContent = '重试';
+    retryBtn.addEventListener('click', async () => {
+      await scanSingleSerialPort(path, true);
+    });
+    row.actions.appendChild(retryBtn);
+    return;
+  }
+
+  if (result && result.status === 'non-esp') {
+    row.element.classList.add('status-non-esp');
+    row.actions.innerHTML = '<span class="serial-row-muted">非ESP设备</span>';
+    return;
+  }
+
+  if (result && result.status === 'scanning') {
+    row.element.classList.add('status-scanning');
+    row.actions.innerHTML = '<span class="serial-row-spinner"></span>';
+  }
+}
+
+function buildSerialRow(port) {
+  const row = document.createElement('div');
+  row.className = 'serial-row status-scanning';
+  row.dataset.path = port.path;
+  row.innerHTML = `
+    <div class="serial-row-main">
+      <div class="serial-row-path">${port.path}</div>
+      <div class="serial-row-meta">${port.manufacturer || '未知厂商'} ${port.friendlyName || ''}</div>
+    </div>
+    <div class="serial-row-status">扫描中</div>
+    <div class="serial-row-actions"><span class="serial-row-spinner"></span></div>
+    <div class="serial-row-detail">准备打开串口...</div>
+  `;
+
+  const statusBadge = row.querySelector('.serial-row-status');
+  const actions = row.querySelector('.serial-row-actions');
+  const detail = row.querySelector('.serial-row-detail');
+
+  return { element: row, statusBadge, actions, detail };
+}
+
+async function scanSingleSerialPort(path, manualRetry = false) {
+  if (!scanState || scanState.type !== 'serial') return;
+  const row = scanState.rows[path];
+  if (!row) return;
+
+  setSerialRowStatus(path, '扫描中', '正在打开串口并请求 getDeviceInfos...', { status: 'scanning' });
+  try {
+    const res = await electronAPI.probeSerialPort({ path, timeoutMs: 500, cmd: { cmd: 'getDeviceInfos' } });
+    if (!scanState || scanState.type !== 'serial') return;
+
+    if (res && res.status === 'connected') {
+      const info = res.deviceInfo || {};
+      const detail = `识别成功 | deviceid: ${info.deviceid || '未知'} | ip: ${info.ip_addr || '--'}`;
+      setSerialRowStatus(path, 'ESP设备', detail, res);
+      if (manualRetry) showNotification(`串口 ${path} 识别成功`, 'success');
+    } else if (res && res.status === 'open-failed') {
+      setSerialRowStatus(path, '打开失败', `错误: ${res.error || '无法打开串口'}`, res);
+      if (manualRetry) showNotification(`串口 ${path} 打开失败`, 'error');
+    } else {
+      const detail = res && res.error === 'timeout' ? '500ms 内未收到有效 getDeviceInfos 响应' : '收到数据但未识别为 ESP 设备';
+      setSerialRowStatus(path, '非ESP', detail, { status: 'non-esp' });
+      if (manualRetry) showNotification(`串口 ${path} 不是 ESP 设备`, 'warning');
+    }
+  } catch (e) {
+    setSerialRowStatus(path, '打开失败', `错误: ${(e && e.message) || '扫描异常'}`, { status: 'open-failed' });
+    if (manualRetry) showNotification(`串口 ${path} 重试失败`, 'error');
+  } finally {
+    if (!manualRetry) {
+      scanState.completed = Math.min(scanState.total, scanState.completed + 1);
+      updateSerialScanProgress();
+    }
+    listConns();
+  }
+}
+
+async function runSerialScanAll() {
+  if (!scanState || scanState.type !== 'serial' || !modalContent) return;
+  if (scanState.running) return;
+  scanState.running = true;
+  scanState.completed = 0;
+  updateSerialScanProgress();
+
+  const paths = Object.keys(scanState.rows);
+  // 批量并发执行所有串口探测（UI 会在每个探测完成时更新）
+  const promises = paths.map(path => {
+    return scanSingleSerialPort(path, false).catch(e => {
+      console.warn('scanSingleSerialPort error', path, e);
+    });
+  });
+  await Promise.all(promises);
+  if (scanState && scanState.type === 'serial') {
+    scanState.running = false;
+  }
+  showNotification('串口扫描完成', 'success');
+}
+
+async function showSerialScanModal() {
+  const html = `
+    <div class="serial-modal">
+      <div class="serial-modal-header">
+        <h3>串口设备扫描</h3>
+        <button id="closeSerialScanX" class="secondary">关闭</button>
+      </div>
+      <div class="serial-modal-sub">自动打开全部串口并发送 getDeviceInfos，500ms 内返回有效信息则识别为设备</div>
+      <div id="serialScanList" class="serial-list"></div>
+      <div class="serial-modal-footer">
+        <div id="serialScanProgress" class="serial-progress">正在获取串口列表...</div>
+        <button id="serialRescanBtn">重新扫描</button>
+      </div>
+    </div>
+  `;
+
+  showModal(html);
+  scanState = {
+    type: 'serial',
+    rows: {},
+    total: 0,
+    completed: 0,
+    running: false,
+  };
+
+  modalContent.querySelector('#closeSerialScanX').addEventListener('click', () => {
+    hideModal();
+  });
+
+  modalContent.querySelector('#serialRescanBtn').addEventListener('click', async () => {
+    if (scanState && scanState.type === 'serial' && scanState.running) {
+      showNotification('正在扫描中，请稍候...', 'warning');
+      return;
+    }
+    showNotification('重新获取串口列表并扫描中...', 'info');
+    await showSerialScanModal();
+  });
+
+  try {
+    const ports = await electronAPI.listSerialPorts();
+    if (!scanState || scanState.type !== 'serial') return;
+
+    const listEl = modalContent.querySelector('#serialScanList');
+    listEl.innerHTML = '';
+
+    if (!ports || ports.length === 0) {
+      listEl.innerHTML = '<div class="serial-empty">未发现可用串口</div>';
+      scanState.total = 0;
+      scanState.completed = 0;
+      updateSerialScanProgress();
+      return;
+    }
+
+    scanState.total = ports.length;
+    scanState.completed = 0;
+
+    ports.forEach((port) => {
+      const row = buildSerialRow(port);
+      scanState.rows[port.path] = row;
+      listEl.appendChild(row.element);
+    });
+
+    updateSerialScanProgress();
+    await runSerialScanAll();
+  } catch (e) {
+    const listEl = modalContent.querySelector('#serialScanList');
+    listEl.innerHTML = `<div class="serial-empty">获取串口失败: ${(e && e.message) || 'unknown error'}</div>`;
+    updateSerialScanProgress();
+  }
+}
+
 // show subnet select modal with memory + prioritize /24
 function showSubnetSelectModalWithMemory(subnets, callback) {
   const key = 'xj_last_subnet_choice';
@@ -1174,14 +1414,32 @@ function randomColorForPort(port) {
 
 let usedColors = new Set();
 function getUniqueRandomColor(ip) {
-  let color;
-  do {
-    const seed = ip.split('.').reduce((acc, part) => acc + parseInt(part), 0);
-    const r = (seed * 97) % 255;
-    const g = (seed * 57) % 255;
-    const b = (seed * 31) % 255;
-    color = `rgb(${r},${g},${b})`;
-  } while (usedColors.has(color));
+  let seed = 0;
+  const text = String(ip || '');
+  for (let i = 0; i < text.length; i++) {
+    seed = (seed * 131 + text.charCodeAt(i)) >>> 0;
+  }
+
+  let color = null;
+  for (let attempt = 0; attempt < 128; attempt++) {
+    const s = (seed + attempt * 1103515245) >>> 0;
+    const r = (s * 97) % 255;
+    const g = (s * 57) % 255;
+    const b = (s * 31) % 255;
+    const candidate = `rgb(${r},${g},${b})`;
+    if (!usedColors.has(candidate)) {
+      color = candidate;
+      break;
+    }
+    if (attempt === 127) {
+      console.warn('Failed to generate unique color for', ip);
+    }
+  }
+
+  if (!color) {
+    color = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
+  }
+
   usedColors.add(color);
   console.log('Assigned color for', ip, ':', color);
   return color;

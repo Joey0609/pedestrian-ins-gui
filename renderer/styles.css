@@ -241,6 +241,14 @@ body {
   background: rgba(239, 68, 68, 0.8);
 }
 
+.device-transport-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(43, 110, 246, 0.15);
+  color: inherit;
+}
+
 .bottombar-info {
   display: flex;
   align-items: center;
@@ -415,6 +423,191 @@ button.danger:hover {
 #modal:not(.hidden) .modalCard {
   transform: scale(1);
   opacity: 1;
+}
+
+.serial-modal {
+  width: min(860px, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.serial-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.serial-modal-header h3 {
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.serial-modal-sub {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.serial-list {
+  max-height: 420px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px;
+}
+
+.serial-row {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: linear-gradient(120deg, #ffffff, #f8fbff);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 90px 90px;
+  grid-template-rows: auto auto;
+  gap: 6px 10px;
+  align-items: center;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+  animation: serialRowIn 0.28s ease;
+}
+
+.serial-row:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.serial-row-main {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+}
+
+.serial-row-path {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.serial-row-meta {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.serial-row-status {
+  justify-self: start;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.16);
+  color: #334155;
+}
+
+.serial-row-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serial-row-detail {
+  grid-column: 1 / 4;
+  grid-row: 2 / 3;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.serial-row.status-connected {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: linear-gradient(120deg, #f5fffa, #ecfff7);
+}
+
+.serial-row.status-connected .serial-row-status {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+}
+
+.serial-row.status-failed {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(120deg, #fff7f7, #fff3f3);
+}
+
+.serial-row.status-failed .serial-row-status {
+  background: rgba(239, 68, 68, 0.16);
+  color: #b91c1c;
+}
+
+.serial-row.status-non-esp .serial-row-status {
+  background: rgba(245, 158, 11, 0.2);
+  color: #b45309;
+}
+
+.serial-retry-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: #ef4444;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.serial-retry-btn:hover {
+  background: #dc2626;
+}
+
+.serial-row-ok {
+  color: #059669;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.serial-row-muted {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.serial-row-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(43, 110, 246, 0.2);
+  border-top-color: #2b6ef6;
+  border-radius: 50%;
+  animation: serialSpin 0.8s linear infinite;
+}
+
+.serial-modal-footer {
+  margin-top: 2px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.serial-progress {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.serial-empty {
+  text-align: center;
+  padding: 26px 14px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+}
+
+@keyframes serialSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes serialRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 #scanCanvas {
