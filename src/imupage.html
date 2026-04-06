@@ -383,6 +383,13 @@
                     <h4>设置传输模式与频率</h4>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
                         <!-- 支持 tcp/udp/usb/serial/bluetooth -->
+                        <div class="custom-select" id="refresh_hz">
+                            <label>系统刷新率（Hz）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
                         <div class="custom-select" id="tcp_mode">
                             <label>TCP 模式</label>
                             <div class="select-trigger">
@@ -549,6 +556,8 @@
     const WS_PATH = '由主窗口管理';
     document.getElementById('wsPath').textContent = WS_PATH;
     document.getElementById('wsPath2').textContent = WS_PATH;
+    const REFRESH_RATE_GEARS = [100, 200];
+    const TRANSMIT_FREQ_SELECT_IDS = ['tcp_freq', 'udp_freq', 'usb_freq', 'serial_freq', 'bluetooth_freq'];
 
     // ===== 状态变量 =====
     let connected = false;
@@ -564,6 +573,22 @@
     let refreshRateHistory = []; // 用于滑动平均
     const REFRESH_RATE_WINDOW = 5; // 平均窗口大小
 
+    function normalizeRefreshGear(hz) {
+        return hz === 200 ? 200 : 100;
+    }
+
+    function applyRefreshRateLimitToFreqSelects(refreshHz) {
+        const limitHz = normalizeRefreshGear(refreshHz);
+        TRANSMIT_FREQ_SELECT_IDS.forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const selected = parseInt(getSelectValue(sel));
+            if (Number.isFinite(selected) && selected > limitHz) {
+                updateCustomSelect(id, limitHz);
+            }
+        });
+    }
+    
     // 初始化 buffers 结构
     function initBuffers() {
         // 存 timestamp + 若干序列，统一以 timestamp 数组为第0列
@@ -819,6 +844,8 @@
     function handleIMU(msg) {
         if (msg.ts === 0) // 设置信息
         {
+            const refreshHz = normalizeRefreshGear(Number(msg.refresh_hz));
+            updateCustomSelect('refresh_hz', refreshHz);
             updateCustomSelect('tcp_mode', msg.tcp_mode);
             updateCustomSelect('udp_mode', msg.udp_mode);
             updateCustomSelect('usb_mode', msg.usb_mode);
@@ -829,6 +856,7 @@
             updateCustomSelect('usb_freq', msg.usb_freq);
             updateCustomSelect('serial_freq', msg.serial_freq);
             updateCustomSelect('bluetooth_freq', msg.bluetooth_freq);
+            applyRefreshRateLimitToFreqSelects(refreshHz);
             showNotification("设备信息读取成功", 'success');
         } else if (msg.ts === 1) // 轨道信息
         {
@@ -1584,9 +1612,16 @@
 
     // ===== 设置页面：模式/频率 下拉填充 =====
     const modeSelects = ['tcp_mode', 'udp_mode', 'usb_mode', 'serial_mode', 'bluetooth_mode'];
-    const freqSelects = ['tcp_freq', 'udp_freq', 'usb_freq', 'serial_freq', 'bluetooth_freq'];
+    const freqSelects = TRANSMIT_FREQ_SELECT_IDS;
+    const refreshRateSel = document.getElementById('refresh_hz');
     const modes = [{v: 0, t: 'OFF'}, {v: 1, t: 'BINARY'}, {v: 2, t: 'ASCII'}];
-    const freqs = [1, 2, 5, 10, 20, 50, 100];
+    const freqs = [1, 2, 5, 10, 20, 50, 100, 200];
+    initCustomSelect(refreshRateSel, REFRESH_RATE_GEARS.map(hz => ({ key: hz, name: hz.toString() })));
+    updateCustomSelect('refresh_hz', REFRESH_RATE_GEARS[0]);
+    refreshRateSel.addEventListener('change', () => {
+        const refreshHz = parseInt(getSelectValue(refreshRateSel));
+        applyRefreshRateLimitToFreqSelects(refreshHz);
+    });
     modeSelects.forEach(id => {
         const sel = document.getElementById(id);
         const modeSelectOptions = [];
@@ -1865,8 +1900,12 @@
         modeSelects.forEach(id => {
             obj[id] = parseInt(getSelectValue(document.getElementById(id)))
         });
+        const refreshHz = normalizeRefreshGear(parseInt(getSelectValue(refreshRateSel)));
+        obj.refresh_hz = refreshHz;
+
         freqSelects.forEach(id => {
-            obj[id] = parseInt(getSelectValue(document.getElementById(id)))
+            const selectedFreq = parseInt(getSelectValue(document.getElementById(id)));
+            obj[id] = Number.isFinite(selectedFreq) ? Math.min(selectedFreq, refreshHz) : refreshHz;
         });
         sendCommand({cmd: 'set_transmit_settings', settings: obj});
         console.log(JSON.stringify({cmd: 'set_transmit_settings', settings: obj}));
