@@ -390,6 +390,13 @@
                             </div>
                             <div class="select-options"></div>
                         </div>
+                        <div class="custom-select" id="ahrs_mount_mode">
+                            <label>安装方式</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
                         <div class="custom-select" id="tcp_mode">
                             <label>TCP 模式</label>
                             <div class="select-trigger">
@@ -557,6 +564,10 @@
     document.getElementById('wsPath').textContent = WS_PATH;
     document.getElementById('wsPath2').textContent = WS_PATH;
     const REFRESH_RATE_GEARS = [100, 200];
+    const AHRS_MOUNT_MODE_OPTIONS = [
+            { key: 0, name: '水平安装' },
+            { key: 1, name: '垂直安装' }
+        ];
     const TRANSMIT_FREQ_SELECT_IDS = ['tcp_freq', 'udp_freq', 'usb_freq', 'serial_freq', 'bluetooth_freq'];
 
     // ===== 状态变量 =====
@@ -575,6 +586,10 @@
 
     function normalizeRefreshGear(hz) {
         return hz === 200 ? 200 : 100;
+    }
+
+    function normalizeAhrsMountMode(mode) {
+        return mode === 1 ? 1 : 0;
     }
 
     function applyRefreshRateLimitToFreqSelects(refreshHz) {
@@ -845,7 +860,9 @@
         if (msg.ts === 0) // 设置信息
         {
             const refreshHz = normalizeRefreshGear(Number(msg.refresh_hz));
+            const ahrsMountMode = normalizeAhrsMountMode(Number(msg.ahrs_mount_mode));
             updateCustomSelect('refresh_hz', refreshHz);
+            updateCustomSelect('ahrs_mount_mode', ahrsMountMode);
             updateCustomSelect('tcp_mode', msg.tcp_mode);
             updateCustomSelect('udp_mode', msg.udp_mode);
             updateCustomSelect('usb_mode', msg.usb_mode);
@@ -1614,10 +1631,13 @@
     const modeSelects = ['tcp_mode', 'udp_mode', 'usb_mode', 'serial_mode', 'bluetooth_mode'];
     const freqSelects = TRANSMIT_FREQ_SELECT_IDS;
     const refreshRateSel = document.getElementById('refresh_hz');
-    const modes = [{v: 0, t: 'OFF'}, {v: 1, t: 'BINARY'}, {v: 2, t: 'ASCII'}];
+    const ahrsMountModeSel = document.getElementById('ahrs_mount_mode');
+    const modes = [{ v: 0, t: 'OFF'}, {v: 1, t: 'BINARY'}, {v: 2, t: 'ASCII'}];
     const freqs = [1, 2, 5, 10, 20, 50, 100, 200];
     initCustomSelect(refreshRateSel, REFRESH_RATE_GEARS.map(hz => ({ key: hz, name: hz.toString() })));
     updateCustomSelect('refresh_hz', REFRESH_RATE_GEARS[0]);
+    initCustomSelect(ahrsMountModeSel, AHRS_MOUNT_MODE_OPTIONS);
+    updateCustomSelect('ahrs_mount_mode', AHRS_MOUNT_MODE_OPTIONS[0].key);
     refreshRateSel.addEventListener('change', () => {
         const refreshHz = parseInt(getSelectValue(refreshRateSel));
         applyRefreshRateLimitToFreqSelects(refreshHz);
@@ -1902,6 +1922,7 @@
         });
         const refreshHz = normalizeRefreshGear(parseInt(getSelectValue(refreshRateSel)));
         obj.refresh_hz = refreshHz;
+        obj.ahrs_mount_mode = normalizeAhrsMountMode(parseInt(getSelectValue(ahrsMountModeSel)));
 
         freqSelects.forEach(id => {
             const selectedFreq = parseInt(getSelectValue(document.getElementById(id)));

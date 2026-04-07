@@ -249,12 +249,15 @@ document.getElementById('btn-scan-ips').addEventListener('click', async () => {
       const ips = buildScanRangeFromSubnet(selected);
       showModalScanIPs(ips, selected.base + '/' + selected.cidr);
       try {
+        if (scanState && scanState.type === 'ips') scanState.running = true;
         scanAbortRequested = false;
         const res = await electronAPI.scanIPs({ ips, timeout: 800, concurrency: 80 });
         finalizeScan('ips', res);
       } catch (e) {
         console.error('scanIPs error', e);
         showNotification('扫描出错: ' + (e && e.message), 'error');
+      } finally {
+        if (scanState && scanState.type === 'ips') scanState.running = false;
       }
     });
   } catch (e) {
@@ -1033,7 +1036,8 @@ function showModalScanIPs(ips, subnet) {
     type: 'ips',
     ips,
     cells: Array.from({ length: N }, () => ({ color: COLORS.black })), // default black until updated
-    completed: 0
+    completed: 0,
+    running: false
   };
   const gridCont = modalContent.querySelector('#gridContainer');
   const tooltip = modalContent.querySelector('#tooltip');
@@ -1103,9 +1107,20 @@ function addScanButtonsToModal() {
 
   const btnRescan = document.createElement('button'); btnRescan.textContent = '重新扫描（跳过绿色）';
   btnRescan.addEventListener('click', async () => {
+    if (!scanState || scanState.type !== 'ips') return;
+    if (scanState.running) {
+      showNotification('IP 正在扫描中，请稍候...', 'warning');
+      return;
+    }
+
     // build ip list excluding green ones
     scanState.completed = 0;
     const toRescan = scanState.ips.filter((ip, idx) => scanState.cells[idx].color !== COLORS.green);
+    if (toRescan.length === 0) {
+      showNotification('当前无需重新扫描，全部已连接', 'info');
+      return;
+    }
+
     // set non-green to black visually first
     scanState.ips.forEach((ip, idx) => {
       if (scanState.cells[idx].color !== COLORS.green) {
@@ -1116,6 +1131,7 @@ function addScanButtonsToModal() {
     // keep modal open
     showNotification(`重新扫描 ${toRescan.length} 个 IP...`, 'info');
     try {
+      scanState.running = true;
       scanAbortRequested = false;
       const res = await electronAPI.scanIPs({ ips: toRescan, timeout: 800, concurrency: 80 });
       // res updates come via ws-scan-result events; after scan, we can update list
@@ -1123,6 +1139,8 @@ function addScanButtonsToModal() {
     } catch (e) {
       console.error('rescan failed', e);
       showNotification('重新扫描失败', 'error');
+    } finally {
+      if (scanState && scanState.type === 'ips') scanState.running = false;
     }
   });
 
