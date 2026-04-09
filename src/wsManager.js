@@ -132,6 +132,108 @@ class WSManager extends EventEmitter {
     if (typeof this._serialHeartbeatTimer.unref === 'function') {
       this._serialHeartbeatTimer.unref();
     }
+
+    // Performance counters for ws message rates and connection events
+    this._perf = { counters: {} };
+    this._perfTimer = setInterval(() => {
+      try {
+        const lines = [];
+        // WS connections
+        Object.keys(this.conns || {}).forEach(ip => {
+          const c = this.conns[ip];
+          const cnt = (this._perf.counters[ip] && this._perf.counters[ip].msgs) ? this._perf.counters[ip].msgs : 0;
+          lines.push(`[WS-PERF] ${ip} state=${c && c.state ? c.state : 'unknown'} msgs/s=${cnt}`);
+          if (this._perf.counters[ip]) this._perf.counters[ip].msgs = 0;
+        });
+        // Serial connections
+        Object.keys(this.serialConns || {}).forEach(p => {
+          const c = this.serialConns[p];
+          const key = `serial:${p}`;
+          const cnt = (this._perf.counters[key] && this._perf.counters[key].msgs) ? this._perf.counters[key].msgs : 0;
+          lines.push(`[WS-PERF] ${p} state=${c && c.state ? c.state : 'unknown'} msgs/s=${cnt}`);
+          if (this._perf.counters[key]) this._perf.counters[key].msgs = 0;
+        });
+        if (lines.length) console.log(lines.join('\n'));
+      } catch (e) {
+        console.warn('Perf logging failed', e && e.message ? e.message : e);
+      }
+    }, 1000);
+    if (typeof this._perfTimer.unref === 'function') this._perfTimer.unref();
+
+    // Auto reconnect config/state (for ws only)
+    this._manualDisconnectIPs = new Set();
+    this._reconnectState = {};
+    this._reconnectMaxRetries = 3;
+    this._reconnectDelayMs = 5000;
+  }
+
+  _incPerfMsg(ip, isSerial = false) {
+    const key = isSerial ? `serial:${ip}` : ip;
+    if (!this._perf.counters[key]) this._perf.counters[key] = { msgs: 0 };
+    this._perf.counters[key].msgs = (this._perf.counters[key].msgs || 0) + 1;
+  }
+
+  _markManualDisconnect(ip) {
+    this._manualDisconnectIPs.add(ip);
+    const state = this._reconnectState[ip];
+    if (state && state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    delete this._reconnectState[ip];
+  }
+
+  _markConnected(ip) {
+    this._manualDisconnectIPs.delete(ip);
+    const state = this._reconnectState[ip];
+    if (state && state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    this._reconnectState[ip] = { attempts: 0, timer: null };
+  }
+
+  _scheduleReconnect(ip, reason = 'close') {
+    if (!ip || this._manualDisconnectIPs.has(ip)) return;
+    const conn = this.conns[ip];
+    if (conn && conn.ws && conn.ws.readyState === WebSocket.OPEN) return;
+
+    if (!this._reconnectState[ip]) this._reconnectState[ip] = { attempts: 0, timer: null };
+    const state = this._reconnectState[ip];
+    if (state.timer) return;
+
+    if (state.attempts >= this._reconnectMaxRetries) {
+      console.warn(`[WS RECONNECT] ${ip} reached max retries (${this._reconnectMaxRetries}), stop reconnecting`);
+      return;
+    }
+
+    state.attempts += 1;
+    const attempt = state.attempts;
+    console.warn(`[WS RECONNECT] ${ip} attempt ${attempt}/${this._reconnectMaxRetries} in ${this._reconnectDelayMs / 1000}s (reason=${reason})`);
+
+    state.timer = setTimeout(async () => {
+      state.timer = null;
+      if (this._manualDisconnectIPs.has(ip)) return;
+
+      try {
+        const res = await this.connect(ip);
+        if (res && res.ok) {
+          console.log(`[WS RECONNECT] ${ip} reconnected on attempt ${attempt}`);
+          return;
+        }
+        console.warn(`[WS RECONNECT] ${ip} attempt ${attempt} failed`, res && res.error ? res.error : res);
+      } catch (e) {
+        console.warn(`[WS RECONNECT] ${ip} attempt ${attempt} error`, e && e.message ? e.message : e);
+      }
+
+      if (!this._manualDisconnectIPs.has(ip)) {
+        this._scheduleReconnect(ip, 'retry-failed');
+      }
+    }, this._reconnectDelayMs);
+
+    if (typeof state.timer.unref === 'function') {
+      state.timer.unref();
+    }
   }
 
   _sendSerialHeartbeat(path, port) {
@@ -180,6 +282,7 @@ class WSManager extends EventEmitter {
   _handleSerialChunk(path, chunk) {
     const conn = this.serialConns[path];
     if (!conn) return;
+    try { this._incPerfMsg(path, true); } catch (e) {}
     // 先按行尝试快速解析：如果某一行在前10字符内出现 '{'，则认为该行可能是 JSON 并尝试解析
     const chunkStr = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
     const parts = chunkStr.split(/\r?\n/);
@@ -350,6 +453,8 @@ class WSManager extends EventEmitter {
               this.serialConns[path].state = 'closed';
               delete this.serialConns[path];
             }
+            console.log('[SERIAL CLOSED]', path);
+            try { if (this._perf && this._perf.counters[`serial:${path}`]) this._perf.counters[`serial:${path}`].closed = true; } catch (e) {}
           });
           port.on('error', (e) => {
             if (this.serialConns[path]) {
@@ -589,6 +694,8 @@ class WSManager extends EventEmitter {
             // install events
             ws.on('message', (data, isBinary) => {
               try {
+                // perf: count incoming ws message for this ip (scan probe socket)
+                try { this._incPerfMsg(ip); } catch (e) {}
                 const rawText = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
                 const msg = JSON.parse(rawText);
                 // emit ws message
@@ -718,7 +825,17 @@ class WSManager extends EventEmitter {
               }
               
             });
-            ws.on('close', () => { if (this.conns[ip]) this.conns[ip].state = 'closed'; });
+            ws.on('close', () => {
+              if (this.conns[ip]) this.conns[ip].state = 'closed';
+              const manual = this._manualDisconnectIPs.has(ip);
+              console.log('[WS CLOSED]', ip, manual ? '(manual)' : '(unexpected)');
+              try { if (this._perf && this._perf.counters[ip]) this._perf.counters[ip].closed = true; } catch (e) {}
+              if (manual) {
+                this._manualDisconnectIPs.delete(ip);
+                return;
+              }
+              this._scheduleReconnect(ip, 'close');
+            });
             ws.on('error', (e) => {
               console.warn('[WS ERROR]', ip, {
                 code: e && e.code,
@@ -733,6 +850,7 @@ class WSManager extends EventEmitter {
               }
             });
             this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
+            this._markConnected(ip);
           } else {
             // timeout/no-ws
             this.emit('scan-result', { ip, status: 'ping' });
@@ -782,11 +900,14 @@ class WSManager extends EventEmitter {
       const ws = new WebSocket('http://' + ip + '/ws', { skipUTF8Validation: true });
       ws.on('open', () => {
         this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
+        this._markConnected(ip);
         try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); console.log('Sent', JSON.stringify({ cmd: 'getConnSettings' }), 'to', ip); } catch (e) { }
         resolve({ ok: true });
       });
       ws.on('message', (data, isBinary) => {
         try {
+          // perf: count incoming ws message for this ip
+          try { this._incPerfMsg(ip); } catch (e) {}
           const rawText = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
           const msg = JSON.parse(rawText);
           this.conns[ip].lastMsg = msg;
@@ -824,7 +945,17 @@ class WSManager extends EventEmitter {
           });
         }
       });
-      ws.on('close', () => { if (this.conns[ip]) this.conns[ip].state = 'closed'; });
+      ws.on('close', () => {
+        if (this.conns[ip]) this.conns[ip].state = 'closed';
+        const manual = this._manualDisconnectIPs.has(ip);
+        console.log('[WS CLOSED]', ip, manual ? '(manual)' : '(unexpected)');
+        try { if (this._perf && this._perf.counters[ip]) this._perf.counters[ip].closed = true; } catch (e) {}
+        if (manual) {
+          this._manualDisconnectIPs.delete(ip);
+          return;
+        }
+        this._scheduleReconnect(ip, 'close');
+      });
       ws.on('error', (e) => {
         console.warn('[WS ERROR] connect()', ip, {
           code: e && e.code,
@@ -838,6 +969,7 @@ class WSManager extends EventEmitter {
 
   disconnect(ip) {
     if (this.conns[ip] && this.conns[ip].ws) {
+      this._markManualDisconnect(ip);
       this.conns[ip].ws.close();
       delete this.conns[ip];
       return { ok: true };

@@ -162,8 +162,20 @@ Ks 1.00 1.00 1.00
 d 1.00
 endmtl
 newmtl mtl28
+Ka 0.00 0.00 0.00
+Kd 0.00 0.00 0.00
+Ks 0.00 0.00 0.00
+d 1.00
+endmtl
+newmtl mtl29
 Ka 0.62 0.62 0.36
 Kd 0.62 0.62 0.36
 Ks 0.62 0.62 0.36
+d 1.00
+endmtl
+newmtl mtl30
+Ka 0.06 0.06 0.06
+Kd 0.06 0.06 0.06
+Ks 0.06 0.06 0.06
 d 1.00
 endmtl
