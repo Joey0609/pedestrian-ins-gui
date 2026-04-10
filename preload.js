@@ -5,6 +5,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSubnets: () => ipcRenderer.invoke('getSubnets'),
   listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
   probeSerialPort: (opts) => ipcRenderer.invoke('probe-serial-port', opts),
+  selectOtaBin: () => ipcRenderer.invoke('ota-select-bin'),
+  inspectOtaBin: (opts) => ipcRenderer.invoke('ota-inspect-bin', opts),
+  queryOtaDeviceVersions: (opts) => ipcRenderer.invoke('ota-query-device-versions', opts),
+  otaDeviceAction: (opts) => ipcRenderer.invoke('ota-device-action', opts),
+  startOta: (opts) => ipcRenderer.invoke('ota-start', opts),
+  interruptOta: () => ipcRenderer.invoke('ota-interrupt'),
   // scanPorts removed per requirement (not exposed)
   scanIPs: (opts) => ipcRenderer.invoke('scan-ips', opts),
   connectWS: (opts) => ipcRenderer.invoke('connect-ws', opts),
@@ -22,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWSScanResult: (cb) => ipcRenderer.on('ws-scan-result', (e, d) => cb(d)),
   onPortScanUpdate: (cb) => ipcRenderer.on('port-scan-update', (e, d) => cb(d)), // kept but unused
   onWSMessage: (cb) => ipcRenderer.on('ws-message', (e, d) => cb(d)),
+  onOtaProgress: (cb) => ipcRenderer.on('ota-progress', (e, d) => cb(d)),
   openUrl: (url) => ipcRenderer.send('open-url', url),
   getRuntimeStats: () => ipcRenderer.invoke('get-runtime-stats'),
 });

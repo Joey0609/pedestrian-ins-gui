@@ -315,6 +315,20 @@ button.danger:hover {
   background: #dc2626;
 }
 
+#btn-ota {
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+
+#btn-ota:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #fb923c 100%);
+  box-shadow: 0 7px 18px rgba(249, 115, 22, 0.42);
+}
+
+#btn-ota.running {
+  animation: otaPulse 1.4s ease-in-out infinite;
+}
+
 /* ===== Pages ===== */
 .page {
   display: none; 
@@ -432,6 +446,245 @@ button.danger:hover {
   gap: 12px;
 }
 
+.ota-modal {
+  width: min(920px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ota-header h3 {
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.ota-subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.ota-device-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ota-device-list {
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.ota-device-row {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(120deg, #ffffff, #f8fbff);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.ota-device-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #f97316;
+}
+
+.ota-device-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ota-device-id {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.ota-device-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ota-transport-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.14);
+  color: #c2410c;
+}
+
+.ota-device-tail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ota-device-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ota-device-action-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.ota-dropzone {
+  border: 1.5px dashed #f59e0b;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.9), rgba(255, 241, 224, 0.8));
+  padding: 18px;
+  text-align: center;
+  color: #9a3412;
+  transition: all var(--transition-fast);
+}
+
+.ota-dropzone:hover,
+.ota-dropzone.dragover {
+  border-color: #ea580c;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.22);
+}
+
+.ota-file-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ota-file-item {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.ota-file-item strong {
+  color: #0f172a;
+}
+
+.ota-progress-list {
+  max-height: 260px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ota-progress-row {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ota-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.ota-progress-device {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.ota-progress-status {
+  color: var(--text-secondary);
+}
+
+.ota-progress-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.ota-progress-track {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.ota-progress-label {
+  font-size: 11px;
+  color: #6b7280;
+  letter-spacing: 0.02em;
+}
+
+.ota-progress-bar-send {
+  background: #dbeafe;
+}
+
+.ota-progress-bar-ack {
+  background: #dcfce7;
+}
+
+.ota-progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+  transition: width 0.2s ease;
+}
+
+.ota-progress-fill-send {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+.ota-progress-fill-ack {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.ota-progress-row.success .ota-progress-fill-send {
+  background: linear-gradient(90deg, #60a5fa, #3b82f6);
+}
+
+.ota-progress-row.success .ota-progress-fill-ack {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.ota-progress-row.error .ota-progress-fill-send {
+  background: linear-gradient(90deg, #fb7185, #ef4444);
+}
+
+.ota-progress-row.error .ota-progress-fill-ack {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.ota-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.ota-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .serial-modal-header {
   display: flex;
   justify-content: space-between;
@@ -446,6 +699,12 @@ button.danger:hover {
 .serial-modal-sub {
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.serial-modal-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .serial-list {
@@ -1045,4 +1304,13 @@ select:focus {
 
 .btn-back {
   padding: 8px 16px;
+}
+
+@keyframes otaPulse {
+  0%, 100% {
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow: 0 8px 22px rgba(249, 115, 22, 0.5);
+  }
 }

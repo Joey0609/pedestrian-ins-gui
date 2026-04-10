@@ -84,6 +84,38 @@ function safeJsonParse(raw) {
   }
 }
 
+function wsDataToUtf8Text(data) {
+  if (data == null) return '';
+  if (typeof data === 'string') return data;
+  if (Buffer.isBuffer(data)) return data.toString('utf8');
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('utf8');
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString('utf8');
+  }
+  return String(data);
+}
+
+function extractWsJsonMessages(conn, data) {
+  if (!conn) return [];
+
+  const text = wsDataToUtf8Text(data);
+  if (!text) return [];
+
+  conn.wsRawBuffer = (conn.wsRawBuffer || '') + text;
+
+  // Prevent unbounded growth if upstream payload is noisy or malformed.
+  if (conn.wsRawBuffer.length > 256 * 1024) {
+    const lastStart = conn.wsRawBuffer.lastIndexOf('{');
+    conn.wsRawBuffer = lastStart >= 0 ? conn.wsRawBuffer.slice(lastStart) : '';
+  }
+
+  const { jsonStrings, rest } = pullJsonObjectsFromAccumulator(conn.wsRawBuffer);
+  conn.wsRawBuffer = rest;
+  return jsonStrings;
+}
+
 function previewFrameData(data, limit = 128) {
   if (data == null) return { kind: 'null', length: 0, text: '' };
   if (typeof data === 'string') {
@@ -691,131 +723,152 @@ class WSManager extends EventEmitter {
           if (probeRes.status === 'connectable') {
             this.emit('scan-result', { ip, status: 'green' });
             const ws = probeRes.ws;
+            this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null, wsRawBuffer: '' };
+            this._markConnected(ip);
             // install events
             ws.on('message', (data, isBinary) => {
               try {
                 // perf: count incoming ws message for this ip (scan probe socket)
                 try { this._incPerfMsg(ip); } catch (e) {}
-                const rawText = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
-                const msg = JSON.parse(rawText);
-                // emit ws message
-                // connSettings handling
-                if (msg.ts <= 3){ }  // 设置信息，轨道信息，wifi设置信息，系统信息
-                else if (msg.ts === 4) { 
-                  console.log("Received message from", ip, ":", msg);
-                  if (msg.data && typeof msg.data === 'string') {
-                    try {
-                      // 解码 Base64 数据
-                      const binaryString = atob(msg.data);
-                      const bytes = new Uint8Array(binaryString.length);
-                      for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                      }
-                      const view = new DataView(bytes.buffer);
-                      let offset = 0;
-                      // Parse the float[10][3] array
-                      const positions = [];
-                      for (let i = 0; i < 10; i++) {
-                        const position = [];
-                        for (let j = 0; j < 3; j++) {
-                          position.push(view.getFloat32(offset, true)); // Little-endian
-                          offset += 4;
-                        }
-                        positions.push(position);
-                      }
-                      msg.positions = positions;
-                    } catch (error) {
-                      console.error("Base64 解码失败:", error);
-                      showNotification("INS 数据解析错误", 'error');
-                      return;
-                    }
+                const conn = this.conns[ip];
+                if (!conn) return;
 
+                const rawMessages = extractWsJsonMessages(conn, data);
+                if (rawMessages.length === 0) {
+                  conn.lastRawPreview = previewFrameData(data);
+                  return;
+                }
+
+                rawMessages.forEach((rawText) => {
+                  const msg = safeJsonParse(rawText);
+                  if (!msg) {
+                    console.warn('[WS DEBUG] message parse failed (invalid-json-fragment)', ip, {
+                      isBinary,
+                      preview: previewFrameData(data),
+                      rawPreview: rawText.slice(0, 160),
+                    });
+                    return;
                   }
 
-                } else { /* 正常数据 */
-                  if (msg.data && typeof msg.data === 'string') {
-                    try {
-                      // 解码 Base64 数据
-                      const binaryString = atob(msg.data);
-                      const bytes = new Uint8Array(binaryString.length);
-
-                      for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                      }
-
-                      // 使用 DataView 解析二进制数据
-                      const view = new DataView(bytes.buffer);
-                      let offset = 0;
-
-                      // 解析时间戳 (8字节)
-                      const timestamp = view.getBigUint64(offset, true); // 小端序
-                      offset += 8;
-
-                      // 解析传感器数据数组
-                      const parseSensorArray = (count, dimensions) => {
-                        const result = [];
-                        for (let s = 0; s < count; s++) {
-                          const sensorData = [];
-                          for (let d = 0; d < dimensions; d++) {
-                            sensorData.push(view.getFloat32(offset, true)); // 小端序
+                  // emit ws message
+                  // connSettings handling
+                  if (msg.ts <= 3){ }  // 设置信息，轨道信息，wifi设置信息，系统信息
+                  else if (msg.ts === 4) {
+                    console.log("Received message from", ip, ":", msg);
+                    if (msg.data && typeof msg.data === 'string') {
+                      try {
+                        // 解码 Base64 数据
+                        const binaryString = atob(msg.data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                          bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        const view = new DataView(bytes.buffer);
+                        let offset = 0;
+                        // Parse the float[10][3] array
+                        const positions = [];
+                        for (let i = 0; i < 10; i++) {
+                          const position = [];
+                          for (let j = 0; j < 3; j++) {
+                            position.push(view.getFloat32(offset, true)); // Little-endian
                             offset += 4;
                           }
-                          result.push(sensorData);
+                          positions.push(position);
                         }
-                        return result;
-                      };
+                        msg.positions = positions;
+                      } catch (error) {
+                        console.error("Base64 解码失败:", error);
+                        showNotification("INS 数据解析错误", 'error');
+                        return;
+                      }
 
-                      // 解析标量数组
-                      const parseScalarArray = (count) => {
-                        const result = [];
-                        for (let i = 0; i < count; i++) {
-                          result.push(view.getFloat32(offset, true));
-                          offset += 4;
+                    }
+
+                  } else { /* 正常数据 */
+                    if (msg.data && typeof msg.data === 'string') {
+                      try {
+                        // 解码 Base64 数据
+                        const binaryString = atob(msg.data);
+                        const bytes = new Uint8Array(binaryString.length);
+
+                        for (let i = 0; i < binaryString.length; i++) {
+                          bytes[i] = binaryString.charCodeAt(i);
                         }
-                        return result;
-                      };
 
-                      // 解析布尔数组
-                      const parseBoolArray = (count) => {
-                        const result = [];
-                        for (let i = 0; i < count; i++) {
-                          result.push(view.getUint8(offset) !== 0);
-                          offset += 1;
-                        }
-                        return result;
-                      };
+                        // 使用 DataView 解析二进制数据
+                        const view = new DataView(bytes.buffer);
+                        let offset = 0;
 
-                      // 解析所有 IMU 数据字段
-                      const imuData = {
-                        timestamp: Number(timestamp),
-                        raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
-                        raw_temp: parseScalarArray(BMI088_NUM + 1),
-                        quat: parseSensorArray(BMI088_NUM + 1, 4),
-                        rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
-                        eular: parseSensorArray(BMI088_NUM + 1, 3),
-                        linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
-                        displacement: parseSensorArray(BMI088_NUM + 1, 3),
-                        stationary: parseBoolArray(BMI088_NUM + 1)
-                      };
+                        // 解析时间戳 (8字节)
+                        const timestamp = view.getBigUint64(offset, true); // 小端序
+                        offset += 8;
 
-                      // 将解析后的数据合并到 msg 对象
-                      Object.assign(msg, imuData);
-                    } catch (error) {
-                      console.error("Base64 解码失败:", error);
-                      showNotification("IMU 数据解析错误", 'error');
-                      return;
+                        // 解析传感器数据数组
+                        const parseSensorArray = (count, dimensions) => {
+                          const result = [];
+                          for (let s = 0; s < count; s++) {
+                            const sensorData = [];
+                            for (let d = 0; d < dimensions; d++) {
+                              sensorData.push(view.getFloat32(offset, true)); // 小端序
+                              offset += 4;
+                            }
+                            result.push(sensorData);
+                          }
+                          return result;
+                        };
+
+                        // 解析标量数组
+                        const parseScalarArray = (count) => {
+                          const result = [];
+                          for (let i = 0; i < count; i++) {
+                            result.push(view.getFloat32(offset, true));
+                            offset += 4;
+                          }
+                          return result;
+                        };
+
+                        // 解析布尔数组
+                        const parseBoolArray = (count) => {
+                          const result = [];
+                          for (let i = 0; i < count; i++) {
+                            result.push(view.getUint8(offset) !== 0);
+                            offset += 1;
+                          }
+                          return result;
+                        };
+
+                        // 解析所有 IMU 数据字段
+                        const imuData = {
+                          timestamp: Number(timestamp),
+                          raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                          raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
+                          raw_temp: parseScalarArray(BMI088_NUM + 1),
+                          quat: parseSensorArray(BMI088_NUM + 1, 4),
+                          rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
+                          eular: parseSensorArray(BMI088_NUM + 1, 3),
+                          linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                          earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                          kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
+                          kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
+                          displacement: parseSensorArray(BMI088_NUM + 1, 3),
+                          stationary: parseBoolArray(BMI088_NUM + 1)
+                        };
+
+                        // 将解析后的数据合并到 msg 对象
+                        Object.assign(msg, imuData);
+                      } catch (error) {
+                        console.error("Base64 解码失败:", error);
+                        showNotification("IMU 数据解析错误", 'error');
+                        return;
+                      }
+
                     }
 
                   }
-
-                }
-                this.conns[ip].lastMsg = msg;
-                this.conns[ip].lastRawPreview = previewFrameData(data);
-                this.emit('ws-message', { ip, msg });
+                  conn.lastMsg = msg;
+                  conn.lastRawPreview = previewFrameData(data);
+                  this.emit('ws-message', { ip, msg });
+                });
               } catch (e) {
                 console.warn('[WS DEBUG] message parse failed', ip, {
                   error: e && e.message,
@@ -849,8 +902,6 @@ class WSManager extends EventEmitter {
                 console.warn('[WS DEBUG] invalid utf8 frame details', ip, this.conns[ip] && this.conns[ip].lastRawPreview);
               }
             });
-            this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
-            this._markConnected(ip);
           } else {
             // timeout/no-ws
             this.emit('scan-result', { ip, status: 'ping' });
@@ -897,9 +948,9 @@ class WSManager extends EventEmitter {
       if (this.conns[ip] && this.conns[ip].ws && this.conns[ip].ws.readyState === WebSocket.OPEN) {
         resolve({ ok: true, note: 'already' }); return;
       }
-      const ws = new WebSocket('http://' + ip + '/ws', { skipUTF8Validation: true });
+      const ws = new WebSocket('http://' + ip + '/ws', { skipUTF8Validation: true, handshakeTimeout: 1200 });
       ws.on('open', () => {
-        this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null };
+        this.conns[ip] = { ws, state: 'open', lastMsg: null, connSettings: null, wsRawBuffer: '' };
         this._markConnected(ip);
         try { ws.send(JSON.stringify({ cmd: 'getConnSettings' })); console.log('Sent', JSON.stringify({ cmd: 'getConnSettings' }), 'to', ip); } catch (e) { }
         resolve({ ok: true });
@@ -908,34 +959,54 @@ class WSManager extends EventEmitter {
         try {
           // perf: count incoming ws message for this ip
           try { this._incPerfMsg(ip); } catch (e) {}
-          const rawText = Buffer.isBuffer(data) ? data.toString('utf8') : data.toString();
-          const msg = JSON.parse(rawText);
-          this.conns[ip].lastMsg = msg;
-          this.conns[ip].lastRawPreview = previewFrameData(data);
-          this.emit('ws-message', { ip, msg });
-          if (msg.ts === 2 || msg.cmd === 'connSettings' || msg.getConnSettings) {
-            const cs = {
-              udp_host_ip: msg.udp_host_ip || msg.udp_host || null,
-              udp_host_port: msg.udp_host_port || msg.udp_host_port || msg.udp_slave_port || null
-            };
-            this.conns[ip].connSettings = cs;
-            // if matched, emit matched immediately
-            const localAddrs = Object.values(networkInterfaces()).flat().filter(Boolean).map(i => i.address);
-            if (cs.udp_host_ip && localAddrs.includes(cs.udp_host_ip)) {
-              const p = parseInt(cs.udp_host_port, 10);
-              if (!isNaN(p) && p >= 9001 && p <= 9100) {
-                this.emit('matched', { ip, port: p });
-                this.emit('ws-message', { ip, msg }); // forward
+          const conn = this.conns[ip];
+          if (!conn) return;
+          const rawMessages = extractWsJsonMessages(conn, data);
+
+          if (rawMessages.length === 0) {
+            conn.lastRawPreview = previewFrameData(data);
+            return;
+          }
+
+          rawMessages.forEach((rawText) => {
+            const msg = safeJsonParse(rawText);
+            if (!msg) {
+              console.warn('[WS DEBUG] connect() message parse failed (invalid-json-fragment)', ip, {
+                isBinary,
+                preview: previewFrameData(data),
+                rawPreview: rawText.slice(0, 160),
+              });
+              return;
+            }
+
+            conn.lastMsg = msg;
+            conn.lastRawPreview = previewFrameData(data);
+            this.emit('ws-message', { ip, msg });
+
+            if (msg.ts === 2 || msg.cmd === 'connSettings' || msg.getConnSettings) {
+              const cs = {
+                udp_host_ip: msg.udp_host_ip || msg.udp_host || null,
+                udp_host_port: msg.udp_host_port || msg.udp_host_port || msg.udp_slave_port || null
+              };
+              conn.connSettings = cs;
+              // if matched, emit matched immediately
+              const localAddrs = Object.values(networkInterfaces()).flat().filter(Boolean).map(i => i.address);
+              if (cs.udp_host_ip && localAddrs.includes(cs.udp_host_ip)) {
+                const p = parseInt(cs.udp_host_port, 10);
+                if (!isNaN(p) && p >= 9001 && p <= 9100) {
+                  this.emit('matched', { ip, port: p });
+                  this.emit('ws-message', { ip, msg }); // forward
+                }
               }
             }
-          }
-          else if (msg.ts >= 10)
-          {
-            // 解码姿态信息
-          }
-          else{
-            // other messages
-          }
+            else if (msg.ts >= 10)
+            {
+              // 解码姿态信息
+            }
+            else{
+              // other messages
+            }
+          });
         }
         catch (e) {
           console.warn('[WS DEBUG] connect() message parse failed', ip, {

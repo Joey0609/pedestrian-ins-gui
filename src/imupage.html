@@ -297,6 +297,7 @@
                 <div>硬件序列号</div><span id="imu_mac">— —</span>
                 <div>设备 ip 地址 </div><span id="ip_addr">— —</span>
                 <div>Wifi Mac地址 </div><span id="wifi_mac">— —</span>
+                <div>固件版本</div><span id="fw_version">— —</span>
                 <div>Web Socket</div> <strong><span id="wsPath2">— —</span></strong>
                 <div>传 感 器 数 量</div> <strong id="sensorCount">— —</strong>
                 <div>最后更新时间</div> <span id="lastUpdate">— —</span>
@@ -920,6 +921,7 @@
             document.getElementById('imu_mac').textContent = msg.deviceid || '— —';
             document.getElementById('ip_addr').textContent = msg.ip_addr || '— —';
             document.getElementById('wifi_mac').textContent = msg.wifi_mac || '— —';
+            document.getElementById('fw_version').textContent = msg.fw_version || '— —';
             showNotification("设备信息已更新", 'success');
         }
         else if (msg.ts === 4)// 惯导信息防止报错
