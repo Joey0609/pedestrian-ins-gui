@@ -575,6 +575,7 @@
     let connected = false;
     let lastTs = null;
     let buffers = {}; // 存放历史数据用于 uPlot
+    let isPlotViewActive = false;
     let plots = {main: null};
     let visibleSeries = []; // 当前主图的 series 列表
     let timeWindowMs = 5000000; // 默认 10秒窗口
@@ -690,8 +691,31 @@
             const view = btn.dataset.view;
             document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
             document.getElementById(view).classList.remove('hidden');
+            handleMainViewChange(view);
         });
     });
+
+    handleMainViewChange('dataView');
+
+    function handleMainViewChange(view) {
+        setPlotRecordingActive(view === 'plotView');
+    }
+
+    function setPlotRecordingActive(active) {
+        const next = active === true;
+        if (isPlotViewActive === next) return;
+        isPlotViewActive = next;
+
+        if (isPlotViewActive) {
+            // 每次进入折线图页面后从空缓存开始，避免离开期间积压。
+            initBuffers();
+            syncPlotBufferSchema();
+            refreshAllPlotCards();
+            return;
+        }
+
+        clearPlotBuffers();
+    }
 
     function sendCommand(cmd) {
         if (!connected) {
@@ -1066,7 +1090,7 @@
     }
 
     // ===== Buffers 与多图卡 uPlot 数据管理 =====
-    const MAX_POINTS = 6000;
+    const MAX_POINTS = 4000;
     const PLOT_COLORS = ['#ef4444', '#2563eb', '#16a34a', '#f59e0b', '#06b6d4', '#9333ea', '#db2777', '#ea580c', '#14b8a6'];
 
     const plotTypeSel = document.getElementById('plotSelectType');
@@ -1080,28 +1104,93 @@
     let plotCardSeq = 1;
     let draggingCardId = null;
 
+    function getActivePlotKeys() {
+        const keys = new Set();
+        plotCards.forEach(card => {
+            for (let axis = 0; axis < card.dims; axis++) {
+                if (card.axisEnabled[axis] === false) continue;
+                keys.add(`${card.type}_${card.sensor}_${axis}`);
+            }
+        });
+        return keys;
+    }
+
+    function pruneBufferKeys(neededKeys) {
+        Object.keys(buffers).forEach(key => {
+            if (key !== 't' && !neededKeys.has(key)) delete buffers[key];
+        });
+    }
+
+    function parsePlotBufferKey(key) {
+        const m = String(key).match(/^(.*)_(\d+)_(\d+)$/);
+        if (!m) return null;
+        return {
+            group: m[1],
+            sensor: Number(m[2]),
+            axis: Number(m[3])
+        };
+    }
+
+    function getValueByPlotBufferKey(msg, key) {
+        const parsed = parsePlotBufferKey(key);
+        if (!parsed) return NaN;
+
+        const groupData = msg[parsed.group];
+        if (!groupData || groupData[parsed.sensor] === undefined) return NaN;
+
+        const value = groupData[parsed.sensor];
+        if (Array.isArray(value)) {
+            const axisValue = value[parsed.axis];
+            return (typeof axisValue === 'number' && isFinite(axisValue)) ? axisValue : NaN;
+        }
+
+        if (parsed.axis !== 0) return NaN;
+        if (typeof value === 'boolean') return value ? 1 : 0;
+        return (typeof value === 'number' && isFinite(value)) ? value : NaN;
+    }
+
+    function syncPlotBufferSchema() {
+        if (!isPlotViewActive) return;
+
+        const neededKeys = getActivePlotKeys();
+        pruneBufferKeys(neededKeys);
+
+        if (neededKeys.size === 0) {
+            clearPlotBuffers();
+            return;
+        }
+
+        const historyLen = (buffers.t || []).length;
+        neededKeys.forEach(key => {
+            if (!Array.isArray(buffers[key])) {
+                buffers[key] = new Array(historyLen).fill(NaN);
+            }
+        });
+    }
+
+    function clearPlotBuffers() {
+        initBuffers();
+        plotCards.forEach(card => refreshPlotCard(card));
+    }
+
     function pushToBuffers(msg) {
+        if (!isPlotViewActive) return;
+
+        const neededKeys = getActivePlotKeys();
+        if (neededKeys.size === 0) return;
+        pruneBufferKeys(neededKeys);
+
         const ts = (typeof msg.timestamp === 'number')
             ? msg.timestamp
             : ((typeof msg.ts === 'number') ? msg.ts : Date.now() * 1000);
 
         buffers.t.push(ts);
 
-        ['raw_accel', 'raw_gyro', 'eular', 'quat', 'linear_accel', 'earth_accel', 'kf_accel', 'kf_velocity', 'displacement'].forEach(group => {
-            const dims = DATA_GROUPS.find(g => g.key === group)?.dims || 1;
-            for (let s = 0; s < BMI088_NUM; s++) {
-                for (let a = 0; a < dims; a++) {
-                    const key = `${group}_${s}_${a}`;
-                    if (!buffers[key]) buffers[key] = [];
-                    let val = NaN;
-                    if (dims === 1) {
-                        if (msg[group] && typeof msg[group][s] === 'number') val = msg[group][s];
-                    } else if (msg[group] && msg[group][s] && typeof msg[group][s][a] === 'number') {
-                        val = msg[group][s][a];
-                    }
-                    buffers[key].push(val);
-                }
+        neededKeys.forEach(key => {
+            if (!Array.isArray(buffers[key])) {
+                buffers[key] = new Array(Math.max(0, buffers.t.length - 1)).fill(NaN);
             }
+            buffers[key].push(getValueByPlotBufferKey(msg, key));
         });
 
         if (buffers.t.length > MAX_POINTS) {
@@ -1303,6 +1392,7 @@
         card.root.remove();
         plotCards.splice(idx, 1);
         updatePlotEmpty();
+        syncPlotBufferSchema();
     }
 
     function clearPlotCards() {
@@ -1312,6 +1402,7 @@
         });
         plotCards = [];
         updatePlotEmpty();
+        clearPlotBuffers();
     }
 
     function createPlotCard(type, sensor, options = {}) {
@@ -1367,6 +1458,7 @@
             const ck = row.querySelector('input');
             ck.addEventListener('change', () => {
                 axisEnabled[axis] = ck.checked;
+                syncPlotBufferSchema();
                 refreshPlotCard(card);
             });
             axesEl.appendChild(row);
@@ -1475,6 +1567,7 @@
         updateCardButtons(card);
         plotCards.push(card);
         updatePlotEmpty();
+        syncPlotBufferSchema();
         refreshPlotCard(card);
         if (!silent) showNotification('已创建图卡', 'success');
     }
@@ -2073,6 +2166,7 @@
             b.addEventListener('click', () => {
                 Object.values(views).forEach(v => v.classList.add('hidden'));
                 views[b.dataset.view].classList.remove('hidden');
+                handleMainViewChange(b.dataset.view);
             });
         });
     })();
