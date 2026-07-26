@@ -1,6 +1,6 @@
 {
   "name": "WalkingJourney",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "行迹 — 多设备惯导控制",
   "author": "Joey0609",
   "main": "main.js",
