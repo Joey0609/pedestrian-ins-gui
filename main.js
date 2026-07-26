@@ -18,36 +18,37 @@ let otaInterruptState = {
   currentDeviceId: '',
   currentTransport: '',
 };
+let manualUpdateCheckPending = false;
 
 function setupApplicationUpdates() {
   if (!app.isPackaged) return;
 
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('checking-for-update', () => safeSendToRenderer('app-update-status', { state: 'checking' }));
-  autoUpdater.on('update-available', (info) => safeSendToRenderer('app-update-status', { state: 'downloading', version: info.version }));
+  autoUpdater.on('checking-for-update', () => safeSendToRenderer('app-update-status', { state: 'checking', manual: manualUpdateCheckPending }));
+  autoUpdater.on('update-available', (info) => safeSendToRenderer('app-update-status', {
+    state: 'available',
+    version: info.version,
+    currentVersion: app.getVersion(),
+    releaseNotes: info.releaseNotes || '',
+    manual: manualUpdateCheckPending,
+  }));
   autoUpdater.on('download-progress', (progress) => safeSendToRenderer('app-update-status', {
     state: 'downloading',
     percent: Math.round(progress.percent || 0),
   }));
-  autoUpdater.on('update-not-available', () => safeSendToRenderer('app-update-status', { state: 'latest' }));
+  autoUpdater.on('update-not-available', () => {
+    safeSendToRenderer('app-update-status', { state: 'latest', manual: manualUpdateCheckPending });
+    manualUpdateCheckPending = false;
+  });
   autoUpdater.on('error', (error) => {
     console.error('[updater]', error);
-    safeSendToRenderer('app-update-status', { state: 'error', message: error.message });
+    safeSendToRenderer('app-update-status', { state: 'error', message: error.message, manual: manualUpdateCheckPending });
+    manualUpdateCheckPending = false;
   });
-  autoUpdater.on('update-downloaded', async (info) => {
+  autoUpdater.on('update-downloaded', (info) => {
     safeSendToRenderer('app-update-status', { state: 'downloaded', version: info.version });
-    const result = await dialog.showMessageBox(mainWin, {
-      type: 'info',
-      buttons: ['立即重启安装', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-      title: '更新已就绪',
-      message: `行迹 ${info.version} 已下载完成。`,
-      detail: '立即重启即可完成安装；选择“稍后”会在退出程序时自动安装。',
-    });
-    if (result.response === 0) autoUpdater.quitAndInstall();
   });
 
   setTimeout(() => autoUpdater.checkForUpdates(), 3000);
@@ -1202,7 +1203,31 @@ app.whenReady().then(() => {
   // IPCs
   ipcMain.handle('app-check-update', async () => {
     if (!app.isPackaged) return { ok: false, error: 'development-mode' };
-    await autoUpdater.checkForUpdates();
+    try {
+      manualUpdateCheckPending = true;
+      await autoUpdater.checkForUpdates();
+      return { ok: true };
+    } catch (error) {
+      console.error('[updater] check failed', error);
+      manualUpdateCheckPending = false;
+      return { ok: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('app-download-update', async () => {
+    if (!app.isPackaged) return { ok: false, error: 'development-mode' };
+    try {
+      await autoUpdater.downloadUpdate();
+      return { ok: true };
+    } catch (error) {
+      console.error('[updater] download failed', error);
+      return { ok: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('app-install-update', () => {
+    if (!app.isPackaged) return { ok: false, error: 'development-mode' };
+    autoUpdater.quitAndInstall();
     return { ok: true };
   });
 
