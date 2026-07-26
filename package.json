@@ -1,6 +1,6 @@
 {
   "name": "WalkingJourney",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "description": "行迹 — 多设备惯导控制",
   "author": "Joey0609",
   "main": "main.js",
@@ -39,7 +39,8 @@
       {
         "provider": "github",
         "owner": "Joey0609",
-        "repo": "pedestrian-ins-gui"
+        "repo": "pedestrian-ins-gui",
+        "releaseType": "release"
       }
     ],
     "win": {
