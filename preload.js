@@ -2,6 +2,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  checkAppUpdate: () => ipcRenderer.invoke('app-check-update'),
+  imuCalibrationRequest: (args) => ipcRenderer.invoke('imu-calibration-request', args),
+  onAppUpdateStatus: (cb) => ipcRenderer.on('app-update-status', (_event, data) => cb(data)),
   getSubnets: () => ipcRenderer.invoke('getSubnets'),
   listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
   probeSerialPort: (opts) => ipcRenderer.invoke('probe-serial-port', opts),

@@ -1,96 +1,72 @@
-# Generic
-.DS_Store
-Thumbs.db
-desktop.ini
+# --- Node.js / npm ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Visual Studio / .NET
-.vs/
+# --- Electron build outputs ---
+# electron-packager
+WalkingJourney-win32-x64/
+*.zip
+
+# electron-builder
+dist-installer/
+*.exe
+*.exe.blockmap
+
+# Local backup copies from package.bat
+versions/
+
+# Webpack (if used later)
+dist/
+
+# --- IDE ---
 .vscode/
+.idea/
+.vs/
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
 *.DotSettings.user
+*.iml
+*.ipr
+*.iws
+*.sublime-workspace
+*.sublime-project
 
-# Build outputs
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Build outputs ---
 [Bb]in/
 [Oo]bj/
 build/
 Build/
-Builds/
 artifacts/
 TestResults/
-*.log
-
-# NuGet
-packages/
-*.nupkg
-project.lock.json
-project.fragment.lock.json
-.nuget/
-
-# Rider / JetBrains
-.idea/
-*.iml
-*.ipr
-*.iws
-
-# MSBuild / Visual Studio generated
-Generated\ Files/
 *.cache
-*_i.c
-*_p.c
-*.ilk
-*.meta
-*.pch
 *.pdb
 *.ipdb
 
-# User secrets / config / keys
+# --- Environment / secrets ---
 *.pfx
 *.key
 *.cer
 *.pem
-*.publishsettings
 .env
 .env.local
 secrets.json
 
-# Unity (if used)
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-UserSettings/
-MemoryCaptures/
-sysinfo.txt
-Assets/AssetStoreTools*
-
-# Xamarin / Android / iOS
-*.apk
-*.ap_
-*.aab
-*.ipa
-*.keystore
-*.jks
-bin/Debug/
-bin/Release/
-obj/Debug/
-obj/Release/
+# VS Code
+.vscode/
 
 # Logs, coverage
 *.log
 coverage/
-coverage.* 
-*.coverage
-*.coveragexml
-
-# IDE specific
-.vscode/
-.idea/
-*.sublime-workspace
-*.sublime-project
+coverage.*
 
 # Other
 *.swp

@@ -1,5 +1,7 @@
 // renderer.js
 
+// Relative URLs remain resolvable when the renderer is loaded via file:// in
+// the packaged Electron application.
 import * as THREE from '../node_modules/three/build/three.module.js';
 import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { OBJLoader } from '../node_modules/three/examples/jsm/loaders/OBJLoader.js';
@@ -370,6 +372,16 @@ window.addEventListener('message', (event) => {
       electronAPI.broadcastCmd(command);
     }
   }
+  if (event.data && event.data.type === 'imu-calibration-request') {
+    if (currentPage === 'attitude' || currentPage === 'track') return;
+    electronAPI.imuCalibrationRequest({ ...event.data.request, ip: currentPage })
+      .then((result) => event.source.postMessage({
+        type: 'imu-calibration-response', requestId: event.data.requestId, result,
+      }, '*'))
+      .catch((error) => event.source.postMessage({
+        type: 'imu-calibration-response', requestId: event.data.requestId, result: { ok: false, error: error.message },
+      }, '*'));
+  }
 });
 
 // Color map
@@ -429,6 +441,25 @@ function showNotification(message, type = 'info') {
 }
 
 // ---------------- Topbar bindings ----------------
+document.getElementById('btn-check-update').addEventListener('click', async () => {
+  const result = await electronAPI.checkAppUpdate();
+  if (!result || !result.ok) {
+    showNotification('检查更新仅在安装版中可用', 'info');
+  }
+});
+
+electronAPI.onAppUpdateStatus((status) => {
+  if (!status) return;
+  if (status.state === 'checking') showNotification('正在检查更新…', 'info');
+  if (status.state === 'latest') showNotification('当前已是最新版本', 'success');
+  if (status.state === 'downloading') {
+    const text = status.percent == null ? `发现 v${status.version}，正在下载…` : `正在下载更新：${status.percent}%`;
+    showNotification(text, 'info');
+  }
+  if (status.state === 'downloaded') showNotification(`v${status.version} 已下载，等待重启安装`, 'success');
+  if (status.state === 'error') showNotification(`检查更新失败：${status.message || '未知错误'}`, 'warning');
+});
+
 document.getElementById('btn-scan-ips').addEventListener('click', async () => {
   try {
     const subnets = await electronAPI.getSubnets();
@@ -698,6 +729,10 @@ function showDevicePage(ip) {
     }
     
     container.appendChild(devicePage);
+    const iframe = devicePage.querySelector('.device-iframe');
+    iframe.addEventListener('load', () => {
+      iframe.contentWindow.postMessage({ type: 'imu-device-context', ip }, '*');
+    });
   }
   
   // Show this device page

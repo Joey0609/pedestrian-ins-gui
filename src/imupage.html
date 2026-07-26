@@ -125,10 +125,9 @@
         /*display:flex;*/
         .plot-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:6px}
         .plot-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-        #plotCards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-        @media (max-width:1200px){#plotCards{grid-template-columns:1fr}}
+        #plotCards{display:grid;grid-template-columns:1fr;gap:12px}
         .btn.toggled{background:linear-gradient(135deg,var(--accent),#06b6d4);color:#fff;border-color:transparent}
-        .plot-card{display:flex;flex-direction:column;gap:8px;min-height:300px;overflow:hidden}
+        .plot-card{display:flex;flex-direction:column;gap:8px;min-height:390px;overflow:hidden;min-width:0}
         .plot-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
         .plot-card-title{font-weight:600;word-break:break-word}
         .plot-card-sub{font-size:12px;color:var(--muted);word-break:break-word}
@@ -136,7 +135,7 @@
         .axis-toggles{display:flex;gap:10px;flex-wrap:wrap;padding:4px 0}
         .axis-toggle-item{display:flex;align-items:center;gap:4px;font-size:12px}
         .axis-dot{width:10px;height:10px;border-radius:50%}
-        .plot-chart{height:220px;cursor:crosshair;max-width:100%;overflow:hidden}
+        .plot-chart{height:310px;width:100%;min-width:0;cursor:crosshair;max-width:100%;overflow:hidden}
         .plot-empty{padding:12px;border:1px dashed rgba(0,0,0,0.15);border-radius:10px;color:var(--muted);text-align:center}
 
         /*.uplot{height:220px}*/
@@ -289,6 +288,7 @@
             <button class="active" data-view="dataView">实时数据</button>
             <button data-view="plotView">折线图</button>
             <button data-view="settingsView">设置</button>
+            <button data-view="calibImportView">校准导入</button>
         </div>
         <div style="height:12px"></div>
         <div class="card">
@@ -469,6 +469,7 @@
                             <div class="select-options"></div>
                         </div>
                     </div>
+                    <!-- <div class="subtitle" style="margin-top:8px">提示：切换安装方式后，设备会自动重新初始化 AHRS 与 INS。</div> -->
                     <div style="height:12px"></div>
                     <button class="btn" id="resetModeBtn">重置</button>
                     <button class="btn" id="sendModeBtn">确认</button>
@@ -553,6 +554,35 @@
             </div>
             <div style="height:12px"></div>
         </section>
+
+        <!-- 校准导入视图 -->
+        <section class="card fade-in hidden" id="calibImportView">
+            <h4>导入校准参数</h4>
+            </p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                <input type="file" id="calibFileInput" accept=".txt" style="flex:1;min-width:200px">
+                <select id="calibSensorSelect" style="width:80px">
+                    <option value="0">0</option><option value="1">1</option>
+                    <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                </select>
+                <label style="font-size:0.85rem;color:var(--text-secondary)">传感器</label>
+                <button class="btn" id="calibImportBtn">导入并应用</button>
+                <button class="btn" id="calibResetBtn" style="background:var(--danger);color:#fff">重置偏差</button>
+            </div>
+            <div style="margin-top:8px">
+                <pre id="calibPreview" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;
+                    padding:12px;max-height:300px;overflow-y:auto;font-family:var(--mono);font-size:0.75rem;
+                    white-space:pre-wrap;display:none"></pre>
+            </div>
+            <div id="calibResult" style="margin-top:8px;font-size:0.85rem;display:none"></div>
+            <div style="margin-top:10px">
+              <div style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:6px;">当前应用标定数据</div>
+              <div id="calibCurrent"
+                   style="background:var(--bg);border:1px solid var(--border);border-radius:6px;
+                          padding:12px;max-height:300px;overflow-y:auto;font-family:var(--mono);font-size:0.75rem;
+                          line-height:1.6;">加载中...</div>
+            </div>
+        </section>
     </main>
 </div>
 
@@ -561,9 +591,9 @@
 <script>
     // ===== 常量定义 =====
     const BMI088_NUM = 4; // 0..3 实际传感器，4 为综合/平均
-    const WS_PATH = '由主窗口管理';
-    document.getElementById('wsPath').textContent = WS_PATH;
-    document.getElementById('wsPath2').textContent = WS_PATH;
+    let wsDisplayPath = '由主窗口管理';
+    document.getElementById('wsPath').textContent = wsDisplayPath;
+    document.getElementById('wsPath2').textContent = wsDisplayPath;
     const REFRESH_RATE_GEARS = [100, 200];
     const AHRS_MOUNT_MODE_OPTIONS = [
             { key: 0, name: '水平安装' },
@@ -573,6 +603,7 @@
 
     // ===== 状态变量 =====
     let connected = false;
+    let currentDeviceIp = '';
     let lastTs = null;
     let buffers = {}; // 存放历史数据用于 uPlot
     let isPlotViewActive = false;
@@ -692,6 +723,7 @@
             document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
             document.getElementById(view).classList.remove('hidden');
             handleMainViewChange(view);
+            if (view === 'plotView') setTimeout(refreshAllPlotCards, 40);
         });
     });
 
@@ -764,8 +796,36 @@
     reconnectBtn.disabled = true;
     reconnectBtn.title = '连接由主窗口管理';
 
+    const calibrationPending = new Map();
+    function calibrationRequest(request) {
+        return new Promise((resolve) => {
+            if (!currentDeviceIp) return resolve({ ok: false, error: '设备尚未连接' });
+            const requestId = `calib-${Date.now()}-${Math.random()}`;
+            const timer = setTimeout(() => { calibrationPending.delete(requestId); resolve({ ok: false, error: '请求超时' }); }, 12000);
+            calibrationPending.set(requestId, { resolve, timer });
+            window.parent.postMessage({ type: 'imu-calibration-request', requestId, request }, '*');
+        });
+    }
+
     window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'imu-device-context') {
+            currentDeviceIp = event.data.ip || '';
+            document.getElementById('ip_addr').textContent = currentDeviceIp || '— —';
+            wsDisplayPath = currentDeviceIp ? `ws://${currentDeviceIp}/ws` : '由主窗口管理';
+            document.getElementById('wsPath').textContent = wsDisplayPath;
+            document.getElementById('wsPath2').textContent = wsDisplayPath;
+            refreshCurrentCalib();
+        }
+        if (event.data && event.data.type === 'imu-calibration-response') {
+            const pending = calibrationPending.get(event.data.requestId);
+            if (pending) { clearTimeout(pending.timer); calibrationPending.delete(event.data.requestId); pending.resolve(event.data.result); }
+        }
         if (event.data && event.data.type === 'imu-data') {
+            if (event.data.ip && !currentDeviceIp) {
+                currentDeviceIp = event.data.ip;
+                document.getElementById('ip_addr').textContent = currentDeviceIp;
+                refreshCurrentCalib();
+            }
             last_receive_time = Date.now();
             setConnState(true);
             handleIMU(event.data.data);
@@ -1014,22 +1074,33 @@
                         return result;
                     };
 
-                    // 解析所有 IMU 数据字段
+                    // type 1：5 个传感器/平均值的全量数据（100 Hz）。
+                    // type 2：仅 0 号传感器的全量数据（200 Hz）。
+                    // type 3：预留，仅 0 号传感器的前半段姿态数据。
+                    const packetType = Number(msg.type || 1);
+                    if (packetType !== 1 && packetType !== 2 && packetType !== 3) {
+                        throw new Error(`未知的 IMU 数据类型: ${msg.type}`);
+                    }
+
+                    const sensorCount = packetType === 1 ? BMI088_NUM + 1 : 1;
                     const imuData = {
                         timestamp: Number(timestamp),
-                        raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
-                        raw_temp: parseScalarArray(BMI088_NUM + 1),
-                        quat: parseSensorArray(BMI088_NUM + 1, 4),
-                        rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
-                        eular: parseSensorArray(BMI088_NUM + 1, 3),
-                        linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                        kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
-                        displacement: parseSensorArray(BMI088_NUM + 1, 3),
-                        stationary: parseBoolArray(BMI088_NUM + 1)
+                        raw_accel: parseSensorArray(sensorCount, 3),
+                        raw_gyro: parseSensorArray(sensorCount, 3),
+                        raw_temp: parseScalarArray(sensorCount),
+                        quat: parseSensorArray(sensorCount, 4),
+                        rotation_matrix: parseSensorArray(sensorCount, 9),
+                        eular: parseSensorArray(sensorCount, 3),
+                        linear_accel: parseSensorArray(sensorCount, 3),
+                        earth_accel: parseSensorArray(sensorCount, 3)
                     };
+
+                    if (packetType === 1 || packetType === 2) {
+                        imuData.kf_accel = parseSensorArray(sensorCount, 3);
+                        imuData.kf_velocity = parseSensorArray(sensorCount, 3);
+                        imuData.displacement = parseSensorArray(sensorCount, 3);
+                        imuData.stationary = parseBoolArray(sensorCount);
+                    }
 
                     // 将解析后的数据合并到 msg 对象
                     Object.assign(msg, imuData);
@@ -1090,7 +1161,9 @@
     }
 
     // ===== Buffers 与多图卡 uPlot 数据管理 =====
-    const MAX_POINTS = 4000;
+    const MAX_POINTS = 5000;
+    const PLOT_MAX_FPS = 30;
+    const PLOT_MIN_FRAME_MS = 1000 / PLOT_MAX_FPS;
     const PLOT_COLORS = ['#ef4444', '#2563eb', '#16a34a', '#f59e0b', '#06b6d4', '#9333ea', '#db2777', '#ea580c', '#14b8a6'];
 
     const plotTypeSel = document.getElementById('plotSelectType');
@@ -1103,6 +1176,25 @@
     let plotCards = [];
     let plotCardSeq = 1;
     let draggingCardId = null;
+    let lastPlotRefreshAt = 0;
+    let plotRefreshTimer = null;
+
+    function schedulePlotRefresh(force = false) {
+        const elapsed = Date.now() - lastPlotRefreshAt;
+        if (force || elapsed >= PLOT_MIN_FRAME_MS) {
+            if (plotRefreshTimer) { clearTimeout(plotRefreshTimer); plotRefreshTimer = null; }
+            lastPlotRefreshAt = Date.now();
+            refreshAllPlotCards();
+            return;
+        }
+        if (!plotRefreshTimer) {
+            plotRefreshTimer = setTimeout(() => {
+                plotRefreshTimer = null;
+                lastPlotRefreshAt = Date.now();
+                refreshAllPlotCards();
+            }, PLOT_MIN_FRAME_MS - elapsed);
+        }
+    }
 
     function getActivePlotKeys() {
         const keys = new Set();
@@ -1201,7 +1293,7 @@
             }
         }
 
-        refreshAllPlotCards();
+        schedulePlotRefresh();
     }
 
     function ensureYRange(minV, maxV) {
@@ -1305,7 +1397,7 @@
         }
         card.plot = new uPlot({
             width: card.chartEl.clientWidth || 600,
-            height: 220,
+            height: 310,
             legend: {show: false},
             series,
             scales: {x: {time: false, auto: false}, y: {auto: false}},
@@ -1319,6 +1411,8 @@
 
     function refreshPlotCard(card) {
         if (!card || !card.plot) return;
+        const width = Math.max(1, card.chartEl.clientWidth || 600);
+        if (card.plot.width !== width || card.plot.height !== 310) card.plot.setSize({width, height: 310});
         const t = buffers.t || [];
         if (t.length === 0) {
             card.plot.setData([[]]);
@@ -2210,6 +2304,38 @@
     }
 
     setInterval(updateConnUI, 600);
+
+    const calibFileInput = document.getElementById('calibFileInput');
+    const calibSensorSelect = document.getElementById('calibSensorSelect');
+    const calibPreview = document.getElementById('calibPreview');
+    const calibResult = document.getElementById('calibResult');
+    const calibCurrent = document.getElementById('calibCurrent');
+    function showCalibResult(text, ok) { calibResult.style.display = 'block'; calibResult.style.color = ok ? 'var(--success)' : 'var(--danger)'; calibResult.textContent = text; }
+    async function refreshCurrentCalib() {
+        if (!calibCurrent || !currentDeviceIp) return;
+        const json = await calibrationRequest({ action: 'current', sensor: calibSensorSelect.value });
+        if (!json || !json.ok) { calibCurrent.textContent = `读取失败：${(json && json.error) || '未知错误'}`; return; }
+        calibCurrent.textContent = JSON.stringify(json, null, 2);
+    }
+
+    window.addEventListener('resize', () => schedulePlotRefresh(true));
+    document.getElementById('calibImportBtn').addEventListener('click', async () => {
+        const file = calibFileInput.files[0];
+        if (!file) return showCalibResult('请先选择校准 TXT 文件', false);
+        const text = await file.text();
+        calibPreview.textContent = text.substring(0, 3000); calibPreview.style.display = 'block';
+        const json = await calibrationRequest({ action: 'upload', sensor: calibSensorSelect.value, payload: text });
+        showCalibResult(json && json.ok ? `导入成功：${json.message || ''}` : `导入失败：${(json && json.error) || '未知错误'}`, json && json.ok);
+        if (json && json.ok) refreshCurrentCalib();
+    });
+    document.getElementById('calibResetBtn').addEventListener('click', async () => {
+        const sensor = calibSensorSelect.value;
+        if (!confirm(`确定将传感器 ${sensor} 的标定参数重置为默认值吗？`)) return;
+        const json = await calibrationRequest({ action: 'reset', sensor });
+        showCalibResult(json && json.ok ? '已重置为默认值' : `重置失败：${(json && json.error) || '未知错误'}`, json && json.ok);
+        if (json && json.ok) refreshCurrentCalib();
+    });
+    calibSensorSelect.addEventListener('change', refreshCurrentCalib);
 
 </script>
 

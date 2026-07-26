@@ -1,20 +1,71 @@
 {
   "name": "WalkingJourney",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "行迹 — 多设备惯导控制",
+  "author": "Joey0609",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-packager . WalkingJourney --platform=win32 --arch=x64 --overwrite"
+    "pack": "electron-packager . WalkingJourney --platform=win32 --arch=x64 --overwrite",
+    "dist": "electron-builder --win --x64",
+    "release": "electron-builder --win --x64 --publish always"
+  },
+  "build": {
+    "appId": "com.walkingjourney.app",
+    "productName": "行迹",
+    "asar": false,
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "node_modules/three/examples/jsm",
+        "to": "resources/app/node_modules/three/examples/jsm"
+      },
+      {
+        "from": "assets/models/PCBmodel.obj",
+        "to": "resources/app/assets/models/PCBmodel.obj"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Joey0609",
+        "repo": "pedestrian-ins-gui"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "行迹",
+      "language": "2052",
+      "include": "build/installer.nsh"
+    }
   },
   "dependencies": {
-    "electron": "^25.0.0",
     "iconv-lite": "^0.7.0",
     "serialport": "^13.0.0",
     "three": "^0.162.0",
-    "ws": "^8.13.0"
+    "ws": "^8.13.0",
+    "electron-updater": "^6.7.3"
   },
   "devDependencies": {
+    "electron": "^25.0.0",
+    "electron-builder": "^26.15.3",
     "electron-packager": "^17.1.1"
   }
 }

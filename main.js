@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { autoUpdater } = require('electron-updater');
 const { WSManager } = require('./src/wsManager');
 
 let mainWin;
@@ -17,6 +18,40 @@ let otaInterruptState = {
   currentDeviceId: '',
   currentTransport: '',
 };
+
+function setupApplicationUpdates() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => safeSendToRenderer('app-update-status', { state: 'checking' }));
+  autoUpdater.on('update-available', (info) => safeSendToRenderer('app-update-status', { state: 'downloading', version: info.version }));
+  autoUpdater.on('download-progress', (progress) => safeSendToRenderer('app-update-status', {
+    state: 'downloading',
+    percent: Math.round(progress.percent || 0),
+  }));
+  autoUpdater.on('update-not-available', () => safeSendToRenderer('app-update-status', { state: 'latest' }));
+  autoUpdater.on('error', (error) => {
+    console.error('[updater]', error);
+    safeSendToRenderer('app-update-status', { state: 'error', message: error.message });
+  });
+  autoUpdater.on('update-downloaded', async (info) => {
+    safeSendToRenderer('app-update-status', { state: 'downloaded', version: info.version });
+    const result = await dialog.showMessageBox(mainWin, {
+      type: 'info',
+      buttons: ['立即重启安装', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      title: '更新已就绪',
+      message: `行迹 ${info.version} 已下载完成。`,
+      detail: '立即重启即可完成安装；选择“稍后”会在退出程序时自动安装。',
+    });
+    if (result.response === 0) autoUpdater.quitAndInstall();
+  });
+
+  setTimeout(() => autoUpdater.checkForUpdates(), 3000);
+}
 
 const OTA_APP_DESC_OFFSET = 0x20;
 const OTA_APP_DESC_MAGIC = 0xabcd5432;
@@ -1149,6 +1184,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   wsMgr = new WSManager();
+  setupApplicationUpdates();
 
   wsMgr.on('scan-progress', (data) => {
     safeSendToRenderer('ws-scan-progress', data);
@@ -1164,6 +1200,44 @@ app.whenReady().then(() => {
 
 
   // IPCs
+  ipcMain.handle('app-check-update', async () => {
+    if (!app.isPackaged) return { ok: false, error: 'development-mode' };
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  });
+
+  ipcMain.handle('imu-calibration-request', async (_event, args = {}) => {
+    const ip = typeof args.ip === 'string' ? args.ip.trim() : '';
+    const sensor = Number.parseInt(args.sensor, 10);
+    const action = args.action;
+    if (!isIPv4Address(ip) || !Number.isInteger(sensor) || sensor < 0 || sensor > 4) {
+      return { ok: false, error: 'invalid calibration request' };
+    }
+
+    const routes = {
+      current: { path: `/api/calibration/current?sensor=${sensor}`, method: 'GET' },
+      upload: { path: `/api/calibration/upload?sensor=${sensor}`, method: 'POST' },
+      reset: { path: `/api/calibration/reset?sensor=${sensor}`, method: 'POST' },
+    };
+    const route = routes[action];
+    if (!route) return { ok: false, error: 'unsupported calibration action' };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(`http://${ip}${route.path}`, {
+        method: route.method,
+        body: action === 'upload' ? String(args.payload || '') : undefined,
+        signal: controller.signal,
+      });
+      const body = await response.json();
+      return response.ok ? body : { ok: false, error: body.error || `HTTP ${response.status}` };
+    } catch (error) {
+      return { ok: false, error: error.name === 'AbortError' ? 'request timeout' : error.message };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
   ipcMain.handle('getSubnets', async () => {
     return wsMgr.getLocalSubnets();
   });
