@@ -1088,18 +1088,26 @@
                         raw_accel: parseSensorArray(sensorCount, 3),
                         raw_gyro: parseSensorArray(sensorCount, 3),
                         raw_temp: parseScalarArray(sensorCount),
-                        quat: parseSensorArray(sensorCount, 4),
-                        rotation_matrix: parseSensorArray(sensorCount, 9),
+                        quat: parseSensorArray(sensorCount, 4)
+                    };
+
+                    if (packetType === 1) {
+                        imuData.rotation_matrix = parseSensorArray(sensorCount, 9);
+                    }
+
+                    Object.assign(imuData, {
                         eular: parseSensorArray(sensorCount, 3),
                         linear_accel: parseSensorArray(sensorCount, 3),
                         earth_accel: parseSensorArray(sensorCount, 3)
-                    };
+                    });
 
-                    if (packetType === 1 || packetType === 2) {
+                    if (packetType === 1) {
                         imuData.kf_accel = parseSensorArray(sensorCount, 3);
                         imuData.kf_velocity = parseSensorArray(sensorCount, 3);
                         imuData.displacement = parseSensorArray(sensorCount, 3);
                         imuData.stationary = parseBoolArray(sensorCount);
+                    } else if (packetType === 2) {
+                        imuData.displacement = parseSensorArray(sensorCount, 3);
                     }
 
                     // 将解析后的数据合并到 msg 对象
