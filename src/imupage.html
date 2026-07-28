@@ -398,6 +398,20 @@
                             </div>
                             <div class="select-options"></div>
                         </div>
+                        <div class="custom-select" id="ins_enabled">
+                            <label>INS 惯导</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
+                        <div class="custom-select" id="accel_range_g">
+                            <label>加速度计量程（±g）</label>
+                            <div class="select-trigger">
+                                <span class="select-value">请选择</span>
+                            </div>
+                            <div class="select-options"></div>
+                        </div>
                         <div class="custom-select" id="tcp_mode">
                             <label>TCP 模式</label>
                             <div class="select-trigger">
@@ -594,11 +608,16 @@
     let wsDisplayPath = '由主窗口管理';
     document.getElementById('wsPath').textContent = wsDisplayPath;
     document.getElementById('wsPath2').textContent = wsDisplayPath;
-    const REFRESH_RATE_GEARS = [100, 200];
+    const REFRESH_RATE_GEARS = [100, 200, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800];
     const AHRS_MOUNT_MODE_OPTIONS = [
             { key: 0, name: '水平安装' },
             { key: 1, name: '垂直安装' }
         ];
+    const INS_ENABLED_OPTIONS = [
+        {key: 1, name: '开启'},
+        {key: 0, name: '关闭'}
+    ];
+    const ACCEL_RANGE_OPTIONS = [3, 6, 12, 24];
     const TRANSMIT_FREQ_SELECT_IDS = ['tcp_freq', 'udp_freq', 'usb_freq', 'serial_freq', 'bluetooth_freq'];
 
     // ===== 状态变量 =====
@@ -946,8 +965,12 @@
         {
             const refreshHz = normalizeRefreshGear(Number(msg.refresh_hz));
             const ahrsMountMode = normalizeAhrsMountMode(Number(msg.ahrs_mount_mode));
+            const insEnabled = normalizeInsEnabled(msg.ins_enabled);
+            const accelRangeG = normalizeAccelRange(msg.accel_range_g);
             updateCustomSelect('refresh_hz', refreshHz);
             updateCustomSelect('ahrs_mount_mode', ahrsMountMode);
+            updateCustomSelect('ins_enabled', insEnabled);
+            updateCustomSelect('accel_range_g', accelRangeG);
             updateCustomSelect('tcp_mode', msg.tcp_mode);
             updateCustomSelect('udp_mode', msg.udp_mode);
             updateCustomSelect('usb_mode', msg.usb_mode);
@@ -1076,7 +1099,7 @@
 
                     // type 1：5 个传感器/平均值的全量数据（100 Hz）。
                     // type 2：仅 0 号传感器的全量数据（200 Hz）。
-                    // type 3：预留，仅 0 号传感器的前半段姿态数据。
+                    // type 3：INS 关闭时，仅包含 0 号传感器的非 INS 数据。
                     const packetType = Number(msg.type || 1);
                     if (packetType !== 1 && packetType !== 2 && packetType !== 3) {
                         throw new Error(`未知的 IMU 数据类型: ${msg.type}`);
@@ -1829,12 +1852,18 @@
     const freqSelects = TRANSMIT_FREQ_SELECT_IDS;
     const refreshRateSel = document.getElementById('refresh_hz');
     const ahrsMountModeSel = document.getElementById('ahrs_mount_mode');
+    const insEnabledSel = document.getElementById('ins_enabled');
+    const accelRangeSel = document.getElementById('accel_range_g');
     const modes = [{ v: 0, t: 'OFF'}, {v: 1, t: 'BINARY'}, {v: 2, t: 'ASCII'}];
-    const freqs = [1, 2, 5, 10, 20, 50, 100, 200];
+    const freqs = [1, 2, 5, 10, 20, 50, 100, 200, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800];
     initCustomSelect(refreshRateSel, REFRESH_RATE_GEARS.map(hz => ({ key: hz, name: hz.toString() })));
     updateCustomSelect('refresh_hz', REFRESH_RATE_GEARS[0]);
     initCustomSelect(ahrsMountModeSel, AHRS_MOUNT_MODE_OPTIONS);
     updateCustomSelect('ahrs_mount_mode', AHRS_MOUNT_MODE_OPTIONS[0].key);
+    initCustomSelect(insEnabledSel, INS_ENABLED_OPTIONS);
+    updateCustomSelect('ins_enabled', INS_ENABLED_OPTIONS[0].key);
+    initCustomSelect(accelRangeSel, ACCEL_RANGE_OPTIONS.map(g => ({key: g, name: `±${g} g`})));
+    updateCustomSelect('accel_range_g', ACCEL_RANGE_OPTIONS[0]);
     refreshRateSel.addEventListener('change', () => {
         const refreshHz = parseInt(getSelectValue(refreshRateSel));
         applyRefreshRateLimitToFreqSelects(refreshHz);
@@ -2120,7 +2149,8 @@
         const refreshHz = normalizeRefreshGear(parseInt(getSelectValue(refreshRateSel)));
         obj.refresh_hz = refreshHz;
         obj.ahrs_mount_mode = normalizeAhrsMountMode(parseInt(getSelectValue(ahrsMountModeSel)));
-
+        obj.ins_enabled = normalizeInsEnabled(getSelectValue(insEnabledSel));
+        obj.accel_range_g = normalizeAccelRange(getSelectValue(accelRangeSel));
         freqSelects.forEach(id => {
             const selectedFreq = parseInt(getSelectValue(document.getElementById(id)));
             obj[id] = Number.isFinite(selectedFreq) ? Math.min(selectedFreq, refreshHz) : refreshHz;
