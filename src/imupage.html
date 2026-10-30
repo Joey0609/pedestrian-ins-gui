@@ -298,6 +298,7 @@
                 <div>设备 ip 地址 </div><span id="ip_addr">— —</span>
                 <div>Wifi Mac地址 </div><span id="wifi_mac">— —</span>
                 <div>固件版本</div><span id="fw_version">— —</span>
+                <div>数据格式</div><span id="protocol_family">— —</span>
                 <div>Web Socket</div> <strong><span id="wsPath2">— —</span></strong>
                 <div>传 感 器 数 量</div> <strong id="sensorCount">— —</strong>
                 <div>最后更新时间</div> <span id="lastUpdate">— —</span>
@@ -602,6 +603,7 @@
 
 <!-- uPlot -->
 <script src="./uplot.js"></script>
+<script src="./imuDataProcessor.js"></script>
 <script>
     // ===== 常量定义 =====
     const BMI088_NUM = 4; // 0..3 实际传感器，4 为综合/平均
@@ -637,11 +639,38 @@
     const REFRESH_RATE_WINDOW = 5; // 平均窗口大小
 
     function normalizeRefreshGear(hz) {
-        return hz === 200 ? 200 : 100;
+        return REFRESH_RATE_GEARS.includes(hz) ? hz : 100;
     }
 
     function normalizeAhrsMountMode(mode) {
         return mode === 1 ? 1 : 0;
+    }
+
+    function normalizeInsEnabled(value) {
+        return value === true || Number(value) === 1 ? 1 : 0;
+    }
+
+    function normalizeAccelRange(value) {
+        const range = Number(value);
+        return ACCEL_RANGE_OPTIONS.includes(range) ? range : ACCEL_RANGE_OPTIONS[0];
+    }
+
+    let pendingTransmitSettings = null;
+    let transmitCheckTimer = null;
+    function checkTransmitSettings(msg) {
+        if (!pendingTransmitSettings) return;
+        const pending = pendingTransmitSettings;
+        const comparable = Object.keys(pending.values).filter(key => msg[key] !== undefined);
+        const mismatched = comparable.filter(key => Number(msg[key]) !== Number(pending.values[key]));
+        if (comparable.length === Object.keys(pending.values).length && mismatched.length === 0) {
+            clearTimeout(transmitCheckTimer);
+            pendingTransmitSettings = null;
+            showNotification('设备设置回读一致', 'success');
+        } else if (Date.now() >= pending.deadline) {
+            clearTimeout(transmitCheckTimer);
+            pendingTransmitSettings = null;
+            showNotification('设备设置回读不一致或字段缺失', 'error');
+        }
     }
 
     function applyRefreshRateLimitToFreqSelects(refreshHz) {
@@ -771,14 +800,16 @@
     function sendCommand(cmd) {
         if (!connected) {
             showNotification('请连接设备', 'error');
-            return;
+            return false;
         }
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({
                 type: 'imu-command',
                 command: cmd
             }, '*');
+            return true;
         }
+        return false;
     }
 
     document.getElementById('setZeroBtn').addEventListener('click', () => {
@@ -917,6 +948,10 @@
         {key:'kf_accel',name:'卡尔曼加速度',dims:3},
         {key:'kf_velocity',name:'原始速度',dims:3},
         {key:'displacement',name:'位移',dims:3},
+        {key:'magnetic_field',name:'磁场',dims:3,displayOnly:true},
+        {key:'baro_temperature_c',name:'气压计温度',dims:1,displayOnly:true},
+        {key:'baro_pressure_pa',name:'气压',dims:1,displayOnly:true},
+        {key:'estimated_floor',name:'楼层',dims:1,displayOnly:true},
         {key:'stationary',name:'静止状态',dims:1}
     ];
 
@@ -963,6 +998,7 @@
     function handleIMU(msg) {
         if (msg.ts === 0) // 设置信息
         {
+            const checkingTransmitSettings = pendingTransmitSettings !== null;
             const refreshHz = normalizeRefreshGear(Number(msg.refresh_hz));
             const ahrsMountMode = normalizeAhrsMountMode(Number(msg.ahrs_mount_mode));
             const insEnabled = normalizeInsEnabled(msg.ins_enabled);
@@ -982,7 +1018,8 @@
             updateCustomSelect('serial_freq', msg.serial_freq);
             updateCustomSelect('bluetooth_freq', msg.bluetooth_freq);
             applyRefreshRateLimitToFreqSelects(refreshHz);
-            showNotification("设备信息读取成功", 'success');
+            if (checkingTransmitSettings) checkTransmitSettings(msg);
+            else showNotification("设备信息读取成功", 'success');
         } else if (msg.ts === 1) // 轨道信息
         {
             // 清空所有现有轨道
@@ -1044,102 +1081,12 @@
             if (typeof msg.battery === 'number') {
                 batteryEl.textContent = msg.battery.toFixed(1) + ' %';
             }
-            // 处理 Base64 编码的 IMU 数据
             if (msg.data && typeof msg.data === 'string') {
-                try {
-                    // 解码 Base64 数据
-                    const binaryString = atob(msg.data);
-                    const bytes = new Uint8Array(binaryString.length);
-
-                    for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                    }
-
-                    // 使用 DataView 解析二进制数据
-                    const view = new DataView(bytes.buffer);
-                    let offset = 0;
-
-                    // 解析时间戳 (8字节)
-                    const timestamp = view.getBigUint64(offset, true); // 小端序
-                    offset += 8;
-
-                    // 解析传感器数据数组
-                    const parseSensorArray = (count, dimensions) => {
-                        const result = [];
-                        for (let s = 0; s < count; s++) {
-                            const sensorData = [];
-                            for (let d = 0; d < dimensions; d++) {
-                                sensorData.push(view.getFloat32(offset, true)); // 小端序
-                                offset += 4;
-                            }
-                            result.push(sensorData);
-                        }
-                        return result;
-                    };
-
-                    // 解析标量数组
-                    const parseScalarArray = (count) => {
-                        const result = [];
-                        for (let i = 0; i < count; i++) {
-                            result.push(view.getFloat32(offset, true));
-                            offset += 4;
-                        }
-                        return result;
-                    };
-
-                    // 解析布尔数组
-                    const parseBoolArray = (count) => {
-                        const result = [];
-                        for (let i = 0; i < count; i++) {
-                            result.push(view.getUint8(offset) !== 0);
-                            offset += 1;
-                        }
-                        return result;
-                    };
-
-                    // type 1：5 个传感器/平均值的全量数据（100 Hz）。
-                    // type 2：仅 0 号传感器的全量数据（200 Hz）。
-                    // type 3：INS 关闭时，仅包含 0 号传感器的非 INS 数据。
-                    const packetType = Number(msg.type || 1);
-                    if (packetType !== 1 && packetType !== 2 && packetType !== 3) {
-                        throw new Error(`未知的 IMU 数据类型: ${msg.type}`);
-                    }
-
-                    const sensorCount = packetType === 1 ? BMI088_NUM + 1 : 1;
-                    const imuData = {
-                        timestamp: Number(timestamp),
-                        raw_accel: parseSensorArray(sensorCount, 3),
-                        raw_gyro: parseSensorArray(sensorCount, 3),
-                        raw_temp: parseScalarArray(sensorCount),
-                        quat: parseSensorArray(sensorCount, 4)
-                    };
-
-                    if (packetType === 1) {
-                        imuData.rotation_matrix = parseSensorArray(sensorCount, 9);
-                    }
-
-                    Object.assign(imuData, {
-                        eular: parseSensorArray(sensorCount, 3),
-                        linear_accel: parseSensorArray(sensorCount, 3),
-                        earth_accel: parseSensorArray(sensorCount, 3)
-                    });
-
-                    if (packetType === 1) {
-                        imuData.kf_accel = parseSensorArray(sensorCount, 3);
-                        imuData.kf_velocity = parseSensorArray(sensorCount, 3);
-                        imuData.displacement = parseSensorArray(sensorCount, 3);
-                        imuData.stationary = parseBoolArray(sensorCount);
-                    } else if (packetType === 2) {
-                        imuData.displacement = parseSensorArray(sensorCount, 3);
-                    }
-
-                    // 将解析后的数据合并到 msg 对象
-                    Object.assign(msg, imuData);
-                } catch (error) {
-                    console.error("Base64 解码失败:", error);
-                    showNotification("IMU 数据解析错误", 'error');
-                    return;
-                }
+                const decoded = window.IMUDataProcessor.decodeIMUData(msg);
+                if (!decoded) return;
+                Object.assign(msg, decoded);
+                document.getElementById('protocol_family').textContent = decoded.protocolFamily === 'all_sensors' ? 'all_sensors' : 'Bmi088';
+                sensorCountEl.textContent = decoded.protocolFamily === 'all_sensors' ? '1' : '4';
             }
 
             // 更新静止状态标志
@@ -1891,6 +1838,7 @@
     function buildPalette() {
         // data_type_t 列表
         DATA_GROUPS.forEach((g, idx) => {
+            if (g.displayOnly) return;
             const it = document.createElement('div');
             it.className = 'item';
             it.draggable = true;
@@ -2146,6 +2094,10 @@
         modeSelects.forEach(id => {
             obj[id] = parseInt(getSelectValue(document.getElementById(id)))
         });
+        if (modeSelects.some(id => !Number.isInteger(obj[id]))) {
+            showNotification('请先读取设备设置并选择传输模式', 'error');
+            return;
+        }
         const refreshHz = normalizeRefreshGear(parseInt(getSelectValue(refreshRateSel)));
         obj.refresh_hz = refreshHz;
         obj.ahrs_mount_mode = normalizeAhrsMountMode(parseInt(getSelectValue(ahrsMountModeSel)));
@@ -2155,9 +2107,22 @@
             const selectedFreq = parseInt(getSelectValue(document.getElementById(id)));
             obj[id] = Number.isFinite(selectedFreq) ? Math.min(selectedFreq, refreshHz) : refreshHz;
         });
-        sendCommand({cmd: 'set_transmit_settings', settings: obj});
+        if (!sendCommand({cmd: 'set_transmit_settings', settings: obj})) return;
         console.log(JSON.stringify({cmd: 'set_transmit_settings', settings: obj}));
-        showNotification('已发送传输设置', 'success');
+        clearTimeout(transmitCheckTimer);
+        pendingTransmitSettings = { values: obj, deadline: Date.now() + 5000 };
+        showNotification('正在确认设备设置');
+        function pollSettings() {
+            if (!pendingTransmitSettings) return;
+            if (Date.now() >= pendingTransmitSettings.deadline) {
+                pendingTransmitSettings = null;
+                showNotification('设备设置回读超时或不一致', 'error');
+                return;
+            }
+            sendCommand({cmd: 'getSettings'});
+            transmitCheckTimer = setTimeout(pollSettings, 1000);
+        }
+        transmitCheckTimer = setTimeout(pollSettings, 800);
     });
 
     const passwordInput = document.getElementById('wifi-password');

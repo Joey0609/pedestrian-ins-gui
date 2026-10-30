@@ -750,120 +750,16 @@ class WSManager extends EventEmitter {
                     return;
                   }
 
-                  // emit ws message
-                  // connSettings handling
-                  if (msg.ts <= 3){ }  // 设置信息，轨道信息，wifi设置信息，系统信息
-                  else if (msg.ts === 4) {
-                    console.log("Received message from", ip, ":", msg);
-                    if (msg.data && typeof msg.data === 'string') {
-                      try {
-                        // 解码 Base64 数据
-                        const binaryString = atob(msg.data);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                          bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        const view = new DataView(bytes.buffer);
-                        let offset = 0;
-                        // Parse the float[10][3] array
-                        const positions = [];
-                        for (let i = 0; i < 10; i++) {
-                          const position = [];
-                          for (let j = 0; j < 3; j++) {
-                            position.push(view.getFloat32(offset, true)); // Little-endian
-                            offset += 4;
-                          }
-                          positions.push(position);
-                        }
-                        msg.positions = positions;
-                      } catch (error) {
-                        console.error("Base64 解码失败:", error);
-                        showNotification("INS 数据解析错误", 'error');
-                        return;
+                  if (msg.ts === 4 && typeof msg.data === 'string') {
+                    try {
+                      const payload = Buffer.from(msg.data, 'base64');
+                      if (payload.length >= 120) {
+                        msg.positions = Array.from({ length: 10 }, (_, i) =>
+                          Array.from({ length: 3 }, (_, j) => payload.readFloatLE((i * 3 + j) * 4)));
                       }
-
+                    } catch (error) {
+                      console.warn('[WS DEBUG] INS data parse failed', ip, error.message);
                     }
-
-                  } else { /* 正常数据 */
-                    if (msg.data && typeof msg.data === 'string') {
-                      try {
-                        // 解码 Base64 数据
-                        const binaryString = atob(msg.data);
-                        const bytes = new Uint8Array(binaryString.length);
-
-                        for (let i = 0; i < binaryString.length; i++) {
-                          bytes[i] = binaryString.charCodeAt(i);
-                        }
-
-                        // 使用 DataView 解析二进制数据
-                        const view = new DataView(bytes.buffer);
-                        let offset = 0;
-
-                        // 解析时间戳 (8字节)
-                        const timestamp = view.getBigUint64(offset, true); // 小端序
-                        offset += 8;
-
-                        // 解析传感器数据数组
-                        const parseSensorArray = (count, dimensions) => {
-                          const result = [];
-                          for (let s = 0; s < count; s++) {
-                            const sensorData = [];
-                            for (let d = 0; d < dimensions; d++) {
-                              sensorData.push(view.getFloat32(offset, true)); // 小端序
-                              offset += 4;
-                            }
-                            result.push(sensorData);
-                          }
-                          return result;
-                        };
-
-                        // 解析标量数组
-                        const parseScalarArray = (count) => {
-                          const result = [];
-                          for (let i = 0; i < count; i++) {
-                            result.push(view.getFloat32(offset, true));
-                            offset += 4;
-                          }
-                          return result;
-                        };
-
-                        // 解析布尔数组
-                        const parseBoolArray = (count) => {
-                          const result = [];
-                          for (let i = 0; i < count; i++) {
-                            result.push(view.getUint8(offset) !== 0);
-                            offset += 1;
-                          }
-                          return result;
-                        };
-
-                        // 解析所有 IMU 数据字段
-                        const imuData = {
-                          timestamp: Number(timestamp),
-                          raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                          raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
-                          raw_temp: parseScalarArray(BMI088_NUM + 1),
-                          quat: parseSensorArray(BMI088_NUM + 1, 4),
-                          rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
-                          eular: parseSensorArray(BMI088_NUM + 1, 3),
-                          linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                          earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                          kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
-                          kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
-                          displacement: parseSensorArray(BMI088_NUM + 1, 3),
-                          stationary: parseBoolArray(BMI088_NUM + 1)
-                        };
-
-                        // 将解析后的数据合并到 msg 对象
-                        Object.assign(msg, imuData);
-                      } catch (error) {
-                        console.error("Base64 解码失败:", error);
-                        showNotification("IMU 数据解析错误", 'error');
-                        return;
-                      }
-
-                    }
-
                   }
                   conn.lastMsg = msg;
                   conn.lastRawPreview = previewFrameData(data);

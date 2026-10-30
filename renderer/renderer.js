@@ -9,10 +9,7 @@ import { MTLLoader } from '../node_modules/three/examples/jsm/loaders/MTLLoader.
 
 const electronAPI = window.electronAPI;
 
-// Load shared IMU data processor
-const imuProcessorScript = document.createElement('script');
-imuProcessorScript.src = '../src/imuDataProcessor.js';
-document.head.appendChild(imuProcessorScript);
+import '../src/imuDataProcessor.js';
 
 let PCBModelGlobal = null; // cached loaded model/group
 
@@ -883,81 +880,9 @@ electronAPI.onWSMessage((msg) => {
   let data = msg.msg;
 
   
-  // Process Base64 encoded IMU data (similar to imupage.html)
-  if (data && data.data && typeof data.data === 'string') {
-    try {
-      // Decode Base64 data
-      const binaryString = atob(data.data);
-      const bytes = new Uint8Array(binaryString.length);
-
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      // Parse binary data using DataView
-      const view = new DataView(bytes.buffer);
-      let offset = 0;
-
-      // Parse timestamp (8 bytes)
-      const timestamp = view.getBigUint64(offset, true); // Little-endian
-      offset += 8;
-
-      // Helper: Parse sensor array
-      const parseSensorArray = (count, dimensions) => {
-        const result = [];
-        for (let s = 0; s < count; s++) {
-          const sensorData = [];
-          for (let d = 0; d < dimensions; d++) {
-            sensorData.push(view.getFloat32(offset, true)); // Little-endian
-            offset += 4;
-          }
-          result.push(sensorData);
-        }
-        return result;
-      };
-
-      // Helper: Parse scalar array
-      const parseScalarArray = (count) => {
-        const result = [];
-        for (let i = 0; i < count; i++) {
-          result.push(view.getFloat32(offset, true));
-          offset += 4;
-        }
-        return result;
-      };
-
-      // Helper: Parse boolean array
-      const parseBoolArray = (count) => {
-        const result = [];
-        for (let i = 0; i < count; i++) {
-          result.push(view.getUint8(offset) !== 0);
-          offset += 1;
-        }
-        return result;
-      };
-
-      // Parse all IMU data fields
-      const imuData = {
-        timestamp: Number(timestamp),
-        raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
-        raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
-        raw_temp: parseScalarArray(BMI088_NUM + 1),
-        quat: parseSensorArray(BMI088_NUM + 1, 4),
-        rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
-        eular: parseSensorArray(BMI088_NUM + 1, 3),
-        linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
-        earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
-        kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
-        kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
-        displacement: parseSensorArray(BMI088_NUM + 1, 3),
-        stationary: parseBoolArray(BMI088_NUM + 1)
-      };
-
-      // Merge parsed data into data object
-      Object.assign(data, imuData);
-    } catch (error) {
-      console.error("Base64 decoding failed:", error);
-    }
+  if (data && typeof data.data === 'string' && Number(data.ts) > 4) {
+    const decoded = window.IMUDataProcessor.decodeIMUData(data);
+    if (decoded) Object.assign(data, decoded);
   }
 
   // 在数据解码/合并之后再更新网格，确保姿态模型读取到最新 quat

@@ -1,98 +1,69 @@
-// imuDataProcessor.js
-// Shared IMU data processing logic for both renderer and imupage
+// The firmware uses distinct WebSocket and USB payloads; reject unknown layouts.
+(function (root) {
+  const BMI088_NUM = 4;
+  function decodeIMUData(message) {
+    if (!message || typeof message.data !== 'string') return null;
+    try {
+      const binary = atob(message.data);
+      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+      const view = new DataView(bytes.buffer);
+      const size = bytes.length;
+      const hasType = message.type !== undefined && message.type !== null;
+      const type = hasType ? Number(message.type) : 1;
+      let family;
+      if (message.protocol === 'all_sensors') family = 'all_sensors';
+      else if (message.protocol && message.protocol !== 'bmi088') return null;
+      else if (message.protocol === 'bmi088') family = 'bmi088';
+      else if (type === 1 && size === 192) family = 'all_sensors';
+      else if ((type === 1 && (size === 773 || size === 776)) ||
+               (type === 2 && (size === 100 || size === 104)) ||
+               (type === 3 && size === 88)) family = 'bmi088';
+      else return null;
 
-const BMI088_NUM = 4; // 0..3 actual sensors, 4 is combined/average
-
-/**
- * Decode Base64 encoded IMU data and parse binary format
- * @param {Object} data - Message object with data.data containing Base64 string
- * @returns {Object} Parsed IMU data object or null on error
- */
-function decodeIMUData(data) {
-  if (!data || !data.data || typeof data.data !== 'string') {
-    return null;
-  }
-
-  try {
-    // Decode Base64 data
-    const binaryString = atob(data.data);
-    const bytes = new Uint8Array(binaryString.length);
-
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    // Parse binary data using DataView
-    const view = new DataView(bytes.buffer);
-    let offset = 0;
-
-    // Parse timestamp (8 bytes)
-    const timestamp = view.getBigUint64(offset, true); // Little-endian
-    offset += 8;
-
-    // Helper: Parse sensor array
-    const parseSensorArray = (count, dimensions) => {
-      const result = [];
-      for (let s = 0; s < count; s++) {
-        const sensorData = [];
-        for (let d = 0; d < dimensions; d++) {
-          sensorData.push(view.getFloat32(offset, true)); // Little-endian
-          offset += 4;
+      const valid = family === 'all_sensors'
+        ? (type === 1 && size === 192) || (type === 2 && size === 136) || (type === 3 && size === 120)
+        : (type === 1 && (size === 773 || size === 776)) || (type === 2 && (size === 100 || size === 104)) || (type === 3 && size === 88);
+      if (!valid) return null;
+      let offset = 0;
+      const timestamp = Number(view.getBigUint64(offset, true)); offset += 8;
+      const scalar = () => { const v = view.getFloat32(offset, true); offset += 4; return v; };
+      const vector = n => Array.from({length: n}, scalar);
+      const vectors = (n, d) => Array.from({length: n}, () => vector(d));
+      const count = family === 'bmi088' && type === 1 ? 5 : 1;
+      const result = { timestamp, protocolFamily: family, raw_accel: vectors(count, 3), raw_gyro: vectors(count, 3),
+        raw_temp: vector(count), quat: vectors(count, 4) };
+      if (type === 1) result.rotation_matrix = vectors(count, 9);
+      result.eular = vectors(count, 3);
+      result.linear_accel = vectors(count, 3);
+      result.earth_accel = vectors(count, 3);
+      if (type === 1) {
+        result.kf_accel = vectors(count, 3);
+        result.kf_velocity = vectors(count, 3);
+        result.displacement = vectors(count, 3);
+      } else if (type === 2) result.displacement = vectors(count, 3);
+      if (family === 'all_sensors') {
+        result.magnetic_field = [vector(3)];
+        result.baro_temperature_c = [scalar()];
+        result.baro_pressure_pa = [scalar()];
+        if (!hasType) {
+          // USB sends IMU_Data; floor comes before the status bytes.
+          result.estimated_floor = [view.getInt32(offset, true)]; offset += 4;
+          result.stationary = [view.getUint8(offset++) !== 0];
+          result.lis2mdl_ready = view.getUint8(offset++) !== 0;
+          result.bmp390l_ready = view.getUint8(offset++) !== 0;
+        } else {
+          if (type === 1) result.stationary = [view.getUint8(offset++) !== 0];
+          result.lis2mdl_ready = view.getUint8(offset++) !== 0;
+          result.bmp390l_ready = view.getUint8(offset++) !== 0;
+          offset = type === 1 ? 184 : type === 2 ? 128 : 112;
+          result.estimated_floor = [view.getInt32(offset, true)];
         }
-        result.push(sensorData);
+      } else if (type === 1) {
+        result.stationary = Array.from({length: count}, () => view.getUint8(offset++) !== 0);
       }
       return result;
-    };
-
-    // Helper: Parse scalar array
-    const parseScalarArray = (count) => {
-      const result = [];
-      for (let i = 0; i < count; i++) {
-        result.push(view.getFloat32(offset, true));
-        offset += 4;
-      }
-      return result;
-    };
-
-    // Helper: Parse boolean array
-    const parseBoolArray = (count) => {
-      const result = [];
-      for (let i = 0; i < count; i++) {
-        result.push(view.getUint8(offset) !== 0);
-        offset += 1;
-      }
-      return result;
-    };
-
-    // Parse all IMU data fields
-    const imuData = {
-      timestamp: Number(timestamp),
-      raw_accel: parseSensorArray(BMI088_NUM + 1, 3),
-      raw_gyro: parseSensorArray(BMI088_NUM + 1, 3),
-      raw_temp: parseScalarArray(BMI088_NUM + 1),
-      quat: parseSensorArray(BMI088_NUM + 1, 4),
-      rotation_matrix: parseSensorArray(BMI088_NUM + 1, 9),
-      eular: parseSensorArray(BMI088_NUM + 1, 3),
-      linear_accel: parseSensorArray(BMI088_NUM + 1, 3),
-      earth_accel: parseSensorArray(BMI088_NUM + 1, 3),
-      kf_accel: parseSensorArray(BMI088_NUM + 1, 3),
-      kf_velocity: parseSensorArray(BMI088_NUM + 1, 3),
-      displacement: parseSensorArray(BMI088_NUM + 1, 3),
-      stationary: parseBoolArray(BMI088_NUM + 1)
-    };
-
-    return imuData;
-  } catch (error) {
-    console.error("Base64 decoding failed:", error);
-    return null;
+    } catch (_) { return null; }
   }
-}
-
-// Export for use in different contexts
-if (typeof module !== 'undefined' && module.exports) {
-  // Node.js / CommonJS
-  module.exports = { decodeIMUData, BMI088_NUM };
-} else if (typeof window !== 'undefined') {
-  // Browser
-  window.IMUDataProcessor = { decodeIMUData, BMI088_NUM };
-}
+  if (typeof module !== 'undefined' && module.exports) module.exports = { decodeIMUData, BMI088_NUM };
+  else root.IMUDataProcessor = { decodeIMUData, BMI088_NUM };
+})(typeof window !== 'undefined' ? window : globalThis);
