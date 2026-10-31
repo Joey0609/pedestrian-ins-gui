@@ -43,7 +43,11 @@ jobs:
         run: npm ci
 
       - name: 构建安装包
-        run: npm run dist -- --publish never
+        run: npm run dist -- --publish never --config.artifactName='${name}-Setup-${version}.${ext}'
+
+      - name: 校验自动更新文件
+        run: |
+          node -e "const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), yaml = require('js-yaml'); const dir = 'dist-installer', manifest = yaml.load(fs.readFileSync(path.join(dir, 'latest.yml'), 'utf8')); if (String(manifest.version) !== require('./package.json').version || !manifest.files?.length) throw new Error('Invalid update manifest'); for (const file of manifest.files) { const name = decodeURIComponent(file.url); if (!/^[A-Za-z0-9._-]+$/.test(name)) throw new Error('Release filename must be ASCII-safe'); const bytes = fs.readFileSync(path.join(dir, name)); if (crypto.createHash('sha512').update(bytes).digest('base64') !== file.sha512 || bytes.length !== file.size) throw new Error('Installer does not match update manifest'); if (!fs.existsSync(path.join(dir, name + '.blockmap'))) throw new Error('Missing differential blockmap'); } console.log('Update manifest, installer and blockmap verified');"
 
       - name: 创建 Release 并上传资产
         uses: softprops/action-gh-release@v2
