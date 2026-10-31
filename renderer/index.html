@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <title>行迹 — 多设备惯导控制</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: ws: http:;">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
   <div id="topbar">
-    <!-- '扫描端口' 按钮已移除 -->
     <button id="btn-scan-ips">扫描IP</button>
     <button id="btn-scan-serial">扫描串口</button>
     <button id="btn-disconnect">断开连接</button>
@@ -82,7 +82,7 @@
     </div>
   </div>
 
-  <div id="modal" class="hidden"></div>
+  <div id="modal" class="hidden" aria-hidden="true"></div>
 
   <div class="notification-container" id="notificationContainer"></div>
 

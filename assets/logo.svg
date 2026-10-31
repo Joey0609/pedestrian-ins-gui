@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">行迹 WalkingJourney</title>
+  <desc id="desc">蓝色圆角方形中的白色足迹、行进路径与定位标记</desc>
+  <defs>
+    <linearGradient id="tile" x1="24" y1="24" x2="488" y2="488" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4c99ff"/>
+      <stop offset="1" stop-color="#1a5ad4"/>
+    </linearGradient>
+  </defs>
+  <path d="M 140 24 L 372 24 C 436 24 488 76 488 140 L 488 372 C 488 436 436 488 372 488 L 140 488 C 76 488 24 436 24 372 L 24 140 C 24 76 76 24 140 24 Z" fill="url(#tile)"/>
+  <path d="M 142 38 L 370 38 C 427 38 474 85 474 142" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.2"/>
+  <path d="M 151 360 C 105 322 131 269 190 273 C 237 276 254 320 307 303 C 339 293 349 270 349 238" fill="none" stroke="#ffffff" stroke-width="29" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 349 104 C 312 104 285 132 285 167 C 285 203 327 239 349 261 C 371 239 413 203 413 167 C 413 132 386 104 349 104 Z" fill="#ffffff"/>
+  <circle cx="349" cy="166" r="25" fill="#2b6ef6"/>
+  <path d="M 175 132 C 157 120 139 131 137 150 C 135 166 143 184 154 196 L 184 179 C 185 164 189 142 175 132 Z" fill="#ffffff" opacity="0.96"/>
+  <path d="M 161 207 L 190 190 C 201 205 202 218 191 225 C 180 232 169 224 161 207 Z" fill="#ffffff" opacity="0.96"/>
+  <circle cx="151" cy="360" r="26" fill="#ffffff"/>
+  <circle cx="151" cy="360" r="12" fill="#66bfff"/>
+</svg>

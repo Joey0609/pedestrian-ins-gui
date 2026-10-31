@@ -35,20 +35,9 @@
         html,body{font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:var(--bg); color:var(--text);transition: background-color 0.3s ease, color 0.3s ease;}
         a{color:var(--accent)}
 
-        /* 顶栏 */
-        header.appbar{
-            display:flex;align-items:center;gap:12px;
-            padding:12px 20px;background:linear-gradient(90deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
-            backdrop-filter: blur(10px);box-shadow:var(--shadow);
-            position: sticky;top: 0;z-index: 1000;
-        }
-        .brand{display:flex;align-items:center;gap:12px}
-        .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;box-shadow:0 6px 18px rgba(37,99,235,0.15)}
-        .title{font-size:1.1rem;font-weight:600}
         .subtitle{font-size:0.85rem;color:var(--muted)}
 
         /* 操作区 */
-        .controls{margin-left:auto;display:flex;gap:10px;align-items:center}
         .btn{background:var(--card);border:1px solid rgba(0,0,0,0.05);padding:8px 12px;min-width: 40px; border-radius:9px;cursor:pointer;box-shadow:var(--shadow);transition:transform .12s ease,box-shadow .12s;color:var(--shadow);flex-wrap: nowrap; }
         .btn:active{transform:translateY(1px)}
         .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04)}
@@ -56,11 +45,6 @@
         /* 主内容布局 */
         .wrap{padding:8px;display:grid;grid-template-columns: 360px 1fr;gap:18px;align-items:start}
         .hidden {display: none;}
-        @media (max-width:1200px){
-            .wrap{grid-template-columns:1fr;}
-            aside.panel{position:static;max-height:none;overflow:visible;}
-        }
-
         /* 侧边栏：整体跟随页面滚动，并允许内部滚动 */
         aside.panel{
             background:var(--card);
@@ -69,10 +53,14 @@
             box-shadow:var(--shadow);
             min-height:200px;
             position:sticky;
-            top:90px;
-            max-height:calc(100vh - 88px);
+            top:8px;
+            max-height:calc(100vh - 16px);
             overflow-y:auto;
             z-index: 999;
+        }
+        @media (max-width:1200px){
+            .wrap{grid-template-columns:1fr;}
+            aside.panel{position:static;top:auto;max-height:none;overflow:visible;z-index:auto;}
         }
         .nav{display:flex;flex-direction:column;gap:8px;user-select:none;}
         .nav button{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;border:none;background:transparent;cursor:pointer;color:var(--muted)}
@@ -85,21 +73,6 @@
         @keyframes expandAndFade {
             0% {width: 18px;height: 18px;opacity: 1;transform: translate(-50%, -50%) scale(1);}
             100% {width: 25px;height: 25px;opacity: 0;transform: translate(-50%, -50%) scale(1.5);}}
-
-        /* 状态卡 */
-        .status{display:flex;gap:10px;align-items:center}
-        .dot{width:12px;height:12px;border-radius:50%}
-        .dot.connect{background:var(--success)}
-        .dot.off{background:var(--danger)}
-
-        /* --- 5. 图标显示/隐藏逻辑 --- */
-        .theme-icon {display: flex;align-items: center;justify-content: center;width: 24px;height: 24px;}
-        .sun-icon{stroke: #000000;}
-        .moon-icon {position: absolute;stroke: #ffffff;transition: opacity 0.3s ease, transform 0.3s ease, stroke 0.3s ease;}
-        [data-theme="light"] .sun-icon {opacity: 1;transform: scale(1) rotate(0deg);}
-        [data-theme="light"] .moon-icon {opacity: 0;transform: scale(0.5) rotate(-90deg);}
-        [data-theme="dark"] .moon-icon {opacity: 1;transform: scale(1) rotate(0deg);}
-        [data-theme="dark"] .sun-icon {opacity: 0;transform: scale(0.5) rotate(90deg);}
 
         /* 卡片 */
         .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:var(--shadow);}
@@ -241,44 +214,6 @@
     </style>
 </head>
 <body data-theme="light">
-<header class="appbar">
-    <div class="brand">
-        <div class="logo">IM</div>
-        <div>
-            <div class="title">IMU Viewer</div>
-            <div class="subtitle">实时数据 配置参数</div>
-        </div>
-    </div>
-    <div class="controls">
-        <div class="status card" style="display:flex;align-items:center;gap:10px">
-            <div class="dot off" id="connDot"></div>
-            <div style="min-width:100px">
-                <div id="connStatus">未连接</div>
-                <div class="subtitle" id="connHint">尝试连接：<span id="wsPath"></span></div>
-            </div>
-        </div>
-
-        <button class="btn" id="themeBtn">
-            <span class="theme-icon">
-                <!-- 月亮图标 (用于夜间模式) -->
-                <svg class="moon-icon" height="1.5em" stroke="currentColor" stroke-linecap="round"
-                     stroke-linejoin="round" stroke-width="2" style="overflow: visible;" viewBox="0 0 24 24" width="1.5em"
-                     xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
-                </svg>
-                <!-- 太阳图标 (用于日间模式) -->
-                <svg class="sun-icon" height="1.5em" stroke="currentColor" stroke-linecap="round"
-                     stroke-linejoin="round" stroke-width="2" style="overflow: visible;" viewBox="0 0 24 24" width="1.5em"
-                     xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="5"></circle>
-                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
-                </svg>
-            </span>
-        </button>
-        <button class="btn" id="reconnectBtn">重连</button>
-    </div>
-
-</header>
 <div class="notification-container" id="notificationContainer"></div>
 <div class="wrap">
 
@@ -299,7 +234,7 @@
                 <div>Wifi Mac地址 </div><span id="wifi_mac">— —</span>
                 <div>固件版本</div><span id="fw_version">— —</span>
                 <div>数据格式</div><span id="protocol_family">— —</span>
-                <div>Web Socket</div> <strong><span id="wsPath2">— —</span></strong>
+                <div id="transportLabel">连接通道</div> <strong><span id="wsPath2">— —</span></strong>
                 <div>传 感 器 数 量</div> <strong id="sensorCount">— —</strong>
                 <div>最后更新时间</div> <span id="lastUpdate">— —</span>
             </div>
@@ -608,7 +543,6 @@
     // ===== 常量定义 =====
     const BMI088_NUM = 4; // 0..3 实际传感器，4 为综合/平均
     let wsDisplayPath = '由主窗口管理';
-    document.getElementById('wsPath').textContent = wsDisplayPath;
     document.getElementById('wsPath2').textContent = wsDisplayPath;
     const REFRESH_RATE_GEARS = [100, 200, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800];
     const AHRS_MOUNT_MODE_OPTIONS = [
@@ -624,7 +558,9 @@
 
     // ===== 状态变量 =====
     let connected = false;
+    let hasAuthoritativeConnectionState = false;
     let currentDeviceIp = '';
+    let currentTransport = '';
     let lastTs = null;
     let buffers = {}; // 存放历史数据用于 uPlot
     let isPlotViewActive = false;
@@ -694,17 +630,11 @@
     initBuffers();
 
     // ===== UI 快速引用 =====
-    const connDot = document.getElementById('connDot');
-    const connStatus = document.getElementById('connStatus');
-    const connHint = document.getElementById('connHint');
     const sensorCountEl = document.getElementById('sensorCount');
     const lastUpdateEl = document.getElementById('lastUpdate');
     const batteryEl = document.getElementById('battery');
     const stationaryEl = document.getElementById('stationaryFlags');
     const groupsContainer = document.getElementById('groupsContainer');
-    const themeBtn = document.getElementById('themeBtn');
-    const reconnectBtn = document.getElementById('reconnectBtn');
-    const reconnectManualBtn = document.getElementById('reconnectBtn');
     const refreshRateEl = document.getElementById('refreshRate');
     // const dumpBtn = document.getElementById('dumpBtn');
 
@@ -735,32 +665,6 @@
             refreshRateEl.textContent = avgRate.toString();
         }
     }, 1000);
-
-    // ===== 主题切换 =====
-    const sunIcon = themeBtn.querySelector('.sun-icon');
-    const moonIcon = themeBtn.querySelector('.moon-icon');
-    (function () {
-        const body = document.body;
-
-        function toggleTheme() {
-
-            const cur = body.getAttribute('data-theme');
-            if (cur === 'dark') {
-                body.classList.remove('night-mode');
-                body.setAttribute('data-theme', 'light');
-                // themeBtn.textContent = '切换夜间模式';
-            } else {
-                body.classList.add('night-mode');
-                body.setAttribute('data-theme', 'dark');
-                // themeBtn.textContent = '切换日间模式';
-            }
-            window.dispatchEvent(new CustomEvent('plot-theme-changed'));
-        }
-
-        themeBtn.addEventListener('click', () => {
-            toggleTheme();
-        });
-    })();
 
     // ===== 导航处理 =====
     document.querySelectorAll('aside .nav button').forEach(btn => {
@@ -813,43 +717,55 @@
     }
 
     document.getElementById('setZeroBtn').addEventListener('click', () => {
-        sendCommand({cmd: 'setZero'});
-        showNotification("成功发送设置零位指令",'success');
+        if (sendCommand({cmd: 'setZero'})) showNotification("成功发送设置零位指令",'success');
     });
     document.getElementById('certAccelBtn').addEventListener('click', () => {
-        sendCommand({cmd: 'insZero'});
-        showNotification("成功发送惯导重置指令",'success');
+        if (sendCommand({cmd: 'insZero'})) showNotification("成功发送惯导重置指令",'success');
     });
     document.getElementById('shutdownBtn').addEventListener('click', () => {
-        sendCommand({cmd: 'shutdown'});
-        showNotification("成功发送关机指令");
+        if (sendCommand({cmd: 'shutdown'})) showNotification("成功发送关机指令");
     });
     // ===== 连接状态与消息接收（由主窗口转发） =====
     function setConnState(ok) {
-        connected = ok;
-        if (ok) {
-            connDot.classList.remove('off');
-            connDot.classList.add('connect');
-            connStatus.textContent = '已连接';
-            connHint.textContent = '由主窗口转发';
-        } else {
-            connDot.classList.remove('connect');
-            connDot.classList.add('off');
-            connStatus.textContent = '未连接';
-            connHint.textContent = '等待主窗口数据...';
-        }
+        connected = ok === true;
     }
 
-    let last_receive_time = -20000;
+    function updateDeviceContext(ip, transport) {
+        const nextId = typeof ip === 'string' ? ip : '';
+        const nextTransport = transport === 'serial' || transport === 'ws'
+            ? transport
+            : (nextId === currentDeviceIp && currentTransport
+                ? currentTransport
+                : (nextId ? (/^(\d{1,3}\.){3}\d{1,3}$/.test(nextId) ? 'ws' : 'serial') : ''));
+        const identityChanged = nextId !== currentDeviceIp || nextTransport !== currentTransport;
+        currentDeviceIp = nextId;
+        currentTransport = nextTransport;
+        // A COM port is a device identifier, never a network IP address.
+        // Periodic connection messages must not overwrite the device-reported IP.
+        if (identityChanged) document.getElementById('ip_addr').textContent = currentTransport === 'ws' ? (currentDeviceIp || '— —') : '— —';
+        document.getElementById('transportLabel').textContent = currentTransport === 'serial' ? '串口' : currentTransport === 'ws' ? 'WebSocket' : '连接通道';
+        wsDisplayPath = !currentDeviceIp ? '由主窗口管理' : currentTransport === 'serial' ? currentDeviceIp : `ws://${currentDeviceIp}/ws`;
+        document.getElementById('wsPath2').textContent = wsDisplayPath;
+    }
 
-    setConnState(true);
-    reconnectBtn.disabled = true;
-    reconnectBtn.title = '连接由主窗口管理';
+    const confirmationPending = new Map();
+    function confirmationRequest(sensor) {
+        const sensorIndex = Number(sensor);
+        if (!window.parent || window.parent === window || !Number.isInteger(sensorIndex) || sensorIndex < 0 || sensorIndex > 4) {
+            return Promise.resolve(false);
+        }
+        return new Promise((resolve) => {
+            const requestId = `confirm-reset-${Date.now()}-${Math.random()}`;
+            const timer = setTimeout(() => { confirmationPending.delete(requestId); resolve(false); }, 60000);
+            confirmationPending.set(requestId, { resolve, timer });
+            window.parent.postMessage({ type: 'imu-confirm-reset-request', requestId, sensor: sensorIndex }, '*');
+        });
+    }
 
     const calibrationPending = new Map();
     function calibrationRequest(request) {
         return new Promise((resolve) => {
-            if (!currentDeviceIp) return resolve({ ok: false, error: '设备尚未连接' });
+            if (!currentDeviceIp || !connected) return resolve({ ok: false, error: '设备尚未连接' });
             const requestId = `calib-${Date.now()}-${Math.random()}`;
             const timer = setTimeout(() => { calibrationPending.delete(requestId); resolve({ ok: false, error: '请求超时' }); }, 12000);
             calibrationPending.set(requestId, { resolve, timer });
@@ -858,27 +774,53 @@
     }
 
     window.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'imu-device-context') {
-            currentDeviceIp = event.data.ip || '';
-            document.getElementById('ip_addr').textContent = currentDeviceIp || '— —';
-            wsDisplayPath = currentDeviceIp ? `ws://${currentDeviceIp}/ws` : '由主窗口管理';
-            document.getElementById('wsPath').textContent = wsDisplayPath;
-            document.getElementById('wsPath2').textContent = wsDisplayPath;
-            refreshCurrentCalib();
-        }
-        if (event.data && event.data.type === 'imu-calibration-response') {
-            const pending = calibrationPending.get(event.data.requestId);
-            if (pending) { clearTimeout(pending.timer); calibrationPending.delete(event.data.requestId); pending.resolve(event.data.result); }
-        }
-        if (event.data && event.data.type === 'imu-data') {
-            if (event.data.ip && !currentDeviceIp) {
-                currentDeviceIp = event.data.ip;
-                document.getElementById('ip_addr').textContent = currentDeviceIp;
-                refreshCurrentCalib();
+        if (event.source && event.source !== window.parent) return;
+        const message = event.data;
+        if (!message || typeof message !== 'object') return;
+        if (message.type === 'imu-device-context') {
+            if (message.ip !== currentDeviceIp) {
+                hasAuthoritativeConnectionState = false;
+                setConnState(false);
             }
-            last_receive_time = Date.now();
-            setConnState(true);
-            handleIMU(event.data.data);
+            updateDeviceContext(message.ip, message.transport);
+            if (typeof message.connected === 'boolean') {
+                hasAuthoritativeConnectionState = true;
+                setConnState(message.connected);
+            }
+            if (connected) refreshCurrentCalib();
+            return;
+        }
+        if (message.type === 'imu-connection-state') {
+            if (typeof message.connected !== 'boolean') return;
+            if (message.ip && currentDeviceIp && message.ip !== currentDeviceIp) return;
+            if (message.ip) updateDeviceContext(message.ip, message.transport);
+            const wasConnected = connected;
+            hasAuthoritativeConnectionState = true;
+            setConnState(message.connected);
+            if (connected && !wasConnected) refreshCurrentCalib();
+            return;
+        }
+        if (message.type === 'imu-confirm-reset-response') {
+            if (typeof message.confirmed !== 'boolean') return;
+            const pending = confirmationPending.get(message.requestId);
+            if (pending) { clearTimeout(pending.timer); confirmationPending.delete(message.requestId); pending.resolve(message.confirmed); }
+            return;
+        }
+        if (message.type === 'imu-calibration-response') {
+            const pending = calibrationPending.get(message.requestId);
+            if (pending) { clearTimeout(pending.timer); calibrationPending.delete(message.requestId); pending.resolve(message.result); }
+            return;
+        }
+        if (message.type === 'imu-data') {
+            if (message.ip && currentDeviceIp && message.ip !== currentDeviceIp) return;
+            const needsContext = message.ip && !currentDeviceIp;
+            if (needsContext || (message.transport && message.transport !== currentTransport)) {
+                updateDeviceContext(message.ip || currentDeviceIp, message.transport);
+            }
+            // Legacy parents can infer online from data, but cached data never overrides an explicit offline state.
+            if (!hasAuthoritativeConnectionState) setConnState(true);
+            if (needsContext && connected) refreshCurrentCalib();
+            handleIMU(message.data);
         }
     });
 
@@ -2252,22 +2194,6 @@
     addChipToLane(1, 'eular');
     addChipToLane(2, 'battery');
 
-    // 页面切换：把主图/数据视图隐藏类名控制
-    (function () {
-        const views = {
-            dataView: document.getElementById('dataView'),
-            plotView: document.getElementById('plotView'),
-            settingsView: document.getElementById('settingsView')
-        };
-        document.querySelectorAll('aside .nav button').forEach(b => {
-            b.addEventListener('click', () => {
-                Object.values(views).forEach(v => v.classList.add('hidden'));
-                views[b.dataset.view].classList.remove('hidden');
-                handleMainViewChange(b.dataset.view);
-            });
-        });
-    })();
-
     // 弹窗提示函数
     function showNotification(message, type = 'info') {
         const container = document.getElementById('notificationContainer');
@@ -2294,20 +2220,6 @@
         }, 3000);
     }
 
-    // ===== 连接状态显示 helper =====
-    function updateConnUI() {
-        if (connected && (Date.now() - last_receive_time > 2000))
-        {
-            connected = false;
-        } // 检查WebSocket连接状态
-        connDot.classList.toggle('connect', connected);
-        connDot.classList.toggle('off', !connected);
-        connStatus.textContent = connected ? '已连接' : '未连接';
-
-    }
-
-    setInterval(updateConnUI, 600);
-
     const calibFileInput = document.getElementById('calibFileInput');
     const calibSensorSelect = document.getElementById('calibSensorSelect');
     const calibPreview = document.getElementById('calibPreview');
@@ -2333,7 +2245,7 @@
     });
     document.getElementById('calibResetBtn').addEventListener('click', async () => {
         const sensor = calibSensorSelect.value;
-        if (!confirm(`确定将传感器 ${sensor} 的标定参数重置为默认值吗？`)) return;
+        if (!await confirmationRequest(sensor)) return;
         const json = await calibrationRequest({ action: 'reset', sensor });
         showCalibResult(json && json.ok ? '已重置为默认值' : `重置失败：${(json && json.error) || '未知错误'}`, json && json.ok);
         if (json && json.ok) refreshCurrentCalib();
