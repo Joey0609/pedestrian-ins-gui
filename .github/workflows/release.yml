@@ -1,10 +1,21 @@
 name: Release
-env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要构建并发布的现有版本标签，例如 v1.1.18"
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -16,6 +27,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: 设置 Node.js
         uses: actions/setup-node@v4
@@ -23,18 +36,22 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: 校验发布版本
+        run: node -e "const version = require('./package.json').version; if (process.env.RELEASE_TAG !== 'v' + version) throw new Error('Release tag must match package version');"
+
       - name: 安装依赖
         run: npm ci
 
       - name: 构建安装包
-        run: npm run dist
+        run: npm run dist -- --publish never
 
       - name: 创建 Release 并上传资产
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             dist-installer/*.exe
             dist-installer/*.exe.blockmap
             dist-installer/latest.yml
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           generate_release_notes: true
