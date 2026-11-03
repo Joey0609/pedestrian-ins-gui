@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  platform: process.platform,
   checkAppUpdate: () => ipcRenderer.invoke('app-check-update'),
   downloadAppUpdate: () => ipcRenderer.invoke('app-download-update'),
   installAppUpdate: () => ipcRenderer.invoke('app-install-update'),
@@ -36,4 +37,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOtaProgress: (cb) => ipcRenderer.on('ota-progress', (e, d) => cb(d)),
   openUrl: (url) => ipcRenderer.send('open-url', url),
   getRuntimeStats: () => ipcRenderer.invoke('get-runtime-stats'),
+  setThemeSource: (source) => ipcRenderer.invoke('set-theme-source', source),
 });

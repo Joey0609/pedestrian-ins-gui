@@ -1,5 +1,5 @@
 // Electron composition root: services own their state; IPC modules own their contracts.
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { WSManager } = require('./src/wsManager');
 const { createWindowService } = require('./main/window');
@@ -12,8 +12,8 @@ const { registerOtaIpc } = require('./main/ota/ipc');
 const { registerFileIpc } = require('./main/files');
 
 const rootDir = __dirname;
-const windowService = createWindowService({ BrowserWindow, rootDir });
-const { safeSendToRenderer, getWindow } = windowService;
+const windowService = createWindowService({ BrowserWindow, rootDir, nativeTheme });
+const { safeSendToRenderer, getWindow, applyThemeChrome } = windowService;
 const getRuntimeStats = createRuntimeStats();
 
 app.whenReady().then(() => {
@@ -33,6 +33,16 @@ app.whenReady().then(() => {
     return getRuntimeStats();
   });
   registerFileIpc({ ipcMain, shell, rootDir });
+
+  // The renderer owns the theme preference; the main process mirrors it onto
+  // native surfaces (title bar, native dialogs, window background).
+  ipcMain.handle('set-theme-source', (_event, source) => {
+    if (source === 'light' || source === 'dark' || source === 'system') {
+      nativeTheme.themeSource = source;
+    }
+    applyThemeChrome(getWindow());
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  });
 
   windowService.createWindow();
 });

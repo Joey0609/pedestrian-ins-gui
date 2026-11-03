@@ -36,9 +36,9 @@ function showDisconnectModal() {
     </div>
     <div id="device-list" style="max-height:300px;overflow-y:auto">
       ${connections.map(conn => `
-        <div class="device-disconnect-item" data-ip="${conn.ip}" style="display:flex;align-items:center;justify-content:space-between;padding:12px;margin-bottom:8px;background:#f5f7fb;border-radius:8px;cursor:pointer;transition:all 0.2s">
+        <div class="device-disconnect-item" data-ip="${conn.ip}" style="display:flex;align-items:center;justify-content:space-between;padding:12px;margin-bottom:8px;background:var(--bg-main);border-radius:8px;cursor:pointer;transition:all 0.2s">
           <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:10px;height:10px;background:#22c55e;border-radius:50%"></div>
+            <div style="width:10px;height:10px;background:var(--success);border-radius:50%"></div>
             <span style="font-weight:500">${conn.ip}</span>
           </div>
           <button class="disconnect-single danger" data-ip="${conn.ip}" style="padding:6px 12px;font-size:12px">断开</button>
@@ -388,6 +388,18 @@ electronAPI.onWSMessage((msg) => {
   if (data && typeof data.data === 'string' && Number(data.ts) > 4) {
     const decoded = window.IMUDataProcessor.decodeIMUData(data);
     if (decoded) Object.assign(data, decoded);
+  }
+
+  // The card may have been created before the first data frame (settings/info
+  // messages arrive first), so swap in the right board once the family shows up.
+  if (data && data.protocolFamily) {
+    const familyConn = connections.find(c => c.ip === ip);
+    if (familyConn && familyConn.family !== data.protocolFamily) {
+      familyConn.family = data.protocolFamily;
+      if (attitude && typeof attitude.setDeviceFamily === 'function') {
+        attitude.setDeviceFamily(ip, data.protocolFamily);
+      }
+    }
   }
 
   // 在数据解码/合并之后再更新网格，确保姿态模型读取到最新 quat

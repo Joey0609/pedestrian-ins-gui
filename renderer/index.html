@@ -6,34 +6,67 @@
   <title>行迹 — 多设备惯导控制</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: ws: http:;">
   <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <!-- Applied before the first paint so the window never flashes the wrong theme. -->
+  <script>
+    (function () {
+      var pref = 'system';
+      try {
+        var stored = localStorage.getItem('wj.theme-preference');
+        if (stored === 'light' || stored === 'dark' || stored === 'system') pref = stored;
+      } catch (e) { /* storage unavailable: fall back to the system preference */ }
+      var dark = pref === 'dark' ||
+        (pref === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.dataset.themePref = pref;
+      document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    })();
+  </script>
+  <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
   <div id="topbar">
-    <button id="btn-scan-ips">扫描IP</button>
-    <button id="btn-scan-serial">扫描串口</button>
-    <button id="btn-disconnect">断开连接</button>
-    <button id="btn-record">录制</button>
-    <button id="btn-zero">方向归零</button>
-    <button id="btn-inertial">惯导重置</button>
-    <button id="btn-ota">在线升级</button>
-    <button id="btn-check-update">检查更新</button>
-    <button id="btn-shutdown">关机</button>
-    <div class="topbar-monitor" aria-label="实时监测">
-      <div class="topbar-monitor-title">实时监测</div>
-      <div class="topbar-monitor-item">
-        <span class="topbar-monitor-label">缓存</span>
-        <strong id="runtime-cache">--</strong>
-      </div>
-      <div class="topbar-monitor-item">
-        <span class="topbar-monitor-label">内存</span>
-        <strong id="runtime-memory">--</strong>
-      </div>
-      <div class="topbar-monitor-item">
-        <span class="topbar-monitor-label">CPU</span>
-        <strong id="runtime-cpu">--</strong>
-      </div>
+    <div class="topbar-group topbar-group-main">
+      <button id="btn-scan-ips" class="btn btn-primary" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/></svg>
+        <span class="btn-text">扫描 IP</span>
+      </button>
+      <button id="btn-scan-serial" class="btn btn-outline" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2z"/><path d="M9 4v4M15 4v4M8 13h.01M12 13h.01M16 13h.01"/></svg>
+        <span class="btn-text">扫描串口</span>
+      </button>
+      <span class="topbar-divider" role="separator" aria-hidden="true"></span>
+      <button id="btn-record" class="btn btn-ghost" type="button">
+        <span class="record-dot" hidden></span>
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>
+        <span class="btn-text record-text">录制</span>
+      </button>
+      <button id="btn-zero" class="btn btn-ghost" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l2.5 2.5"/></svg>
+        <span class="btn-text">方向归零</span>
+      </button>
+      <button id="btn-inertial" class="btn btn-ghost" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M21 3v6h-6"/><circle cx="12" cy="12" r="2.5"/></svg>
+        <span class="btn-text">惯导重置</span>
+      </button>
+      <button id="btn-ota" class="btn btn-ghost btn-accent" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>
+        <span class="btn-text">在线升级</span>
+      </button>
+    </div>
+    <div class="topbar-group topbar-group-tail">
+      <button id="btn-disconnect" class="btn btn-ghost" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18.8 5.2-3.6 3.6"/><path d="M15.9 2.3 21.7 8.1"/><path d="m5.2 18.8 3.6-3.6"/><path d="M2.3 15.9 8.1 21.7"/><path d="m9.5 9.5 5 5"/><path d="M14.5 9.5 19 5a2.1 2.1 0 0 1 3 3l-4.5 4.5"/><path d="M4.9 15.5 9.5 11"/></svg>
+        <span class="btn-text">断开连接</span>
+      </button>
+      <button id="btn-shutdown" class="btn btn-ghost btn-danger-ghost" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
+        <span class="btn-text">关机</span>
+      </button>
+      <button id="btn-check-update" class="btn btn-ghost btn-icon-only" type="button" title="检查更新" aria-label="检查更新">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      </button>
     </div>
   </div>
 
@@ -78,6 +111,14 @@
       <div id="device-tabs"></div>
     </div>
     <div class="bottombar-info">
+      <div class="status-monitor" aria-label="实时监测">
+        <span class="status-item"><span class="status-label">缓存</span><strong id="runtime-cache">--</strong></span>
+        <span class="status-divider" aria-hidden="true"></span>
+        <span class="status-item"><span class="status-label">内存</span><strong id="runtime-memory">--</strong></span>
+        <span class="status-divider" aria-hidden="true"></span>
+        <span class="status-item"><span class="status-label">CPU</span><strong id="runtime-cpu">--</strong></span>
+      </div>
+      <button id="btn-theme" class="theme-toggle" type="button" title="主题：跟随系统（点击切换）" aria-label="切换主题"></button>
       <span id="connection-count">0 台设备</span>
     </div>
   </div>

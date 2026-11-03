@@ -1,5 +1,6 @@
 // Composition root only: domain modules own state, rendering and event handling.
 import '../src/imuDataProcessor.js';
+import { initTheme, mountThemeToggle, onThemeChange } from './theme.js';
 import { createDialogs } from './dialogs.js';
 import { showNotification } from './notifications.js';
 import { createAttitudeView } from './attitude-view.js';
@@ -13,6 +14,30 @@ import { createRuntimeMonitor } from './runtime-monitor.js';
 import { bindToolbar } from './toolbar.js';
 
 const electronAPI = window.electronAPI;
+initTheme();
+// Windows draws its caption buttons over the page (titleBarOverlay), so the
+// stylesheet needs to know how much room to reserve in the top bar.
+document.documentElement.dataset.platform = (electronAPI && electronAPI.platform) || '';
+mountThemeToggle(document.getElementById('btn-theme'));
+
+// Device detail pages are separate documents (src/imupage.html), so the theme
+// has to be forwarded to every iframe — on change and whenever one loads.
+function broadcastThemeToFrames() {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  document.querySelectorAll('.device-iframe').forEach((frame) => {
+    try {
+      frame.contentWindow?.postMessage({ type: 'wj-theme', theme }, '*');
+    } catch (e) {
+      /* the frame may still be navigating */
+    }
+  });
+}
+onThemeChange(broadcastThemeToFrames);
+document.addEventListener('load', (event) => {
+  const target = event.target;
+  if (target && target.classList && target.classList.contains('device-iframe')) broadcastThemeToFrames();
+}, true);
+
 let devices, discovery;
 const dialogs = createDialogs({ onHide: () => discovery.reset() });
 const tracks = createTracks();

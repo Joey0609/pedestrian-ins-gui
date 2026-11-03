@@ -1,52 +1,109 @@
 import { throttle } from './utils.js';
+import { onThemeChange } from './theme.js';
 
 export function createTracks() {
 const MAX_TRACK_POINTS = 12000; // Maximum points per track to prevent memory issues
 const MIN_TRACK_POINT_DISTANCE = 0.03; // Only store new point if distance to previous point is greater than 3cm
 const DRAW_THROTTLE_MS = 50; // Throttle canvas redraw
 const LEGEND_THROTTLE_MS = 500; // Throttle legend updates
+const TRACK_SERIES_TOKENS = ['--series-1', '--series-2', '--series-3', '--series-4', '--series-5', '--series-6'];
 
-let tracks = {}, trackColors = {}, trackVisible = {};
-let replaying = false;
-let throttledDrawTracks = null, throttledUpdateLegend = null;
-
-function randomColorForPort(port) {
-  const seed = (parseInt(port) || 1);
-  const r = (seed * 97) % 255; const g = (seed * 57) % 255; const b = (seed * 31) % 255;
-  return `rgb(${r},${g},${b})`;
+// ---------------------------------------------------------------------------
+// Canvas 2D cannot resolve CSS custom properties, so the concrete colours are
+// read from the theme tokens here and re-read whenever `wj:themechange` fires.
+// ---------------------------------------------------------------------------
+function readCssVar(name) {
+  if (typeof document === 'undefined' || !document.documentElement || !name) return '';
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  } catch (e) {
+    return '';
+  }
 }
 
+function readToken(name, ...fallbacks) {
+  const names = [name].concat(fallbacks);
+  for (let i = 0; i < names.length; i++) {
+    const value = readCssVar(names[i]);
+    if (value) return value;
+  }
+  return 'transparent';
+}
+
+function readCanvasPalette() {
+  return {
+    background: readToken('--viz-bg', '--bg-card'),
+    grid: readToken('--viz-grid', '--border-light'),
+    axis: readToken('--viz-axis', '--border-strong'),
+    text: readToken('--viz-text', '--text-secondary'),
+    series: TRACK_SERIES_TOKENS.map((token) => readToken(token, '--primary')),
+  };
+}
+
+// Normalise a resolved token to #rrggbb for <input type="color">.
+function cssColorToHex(value) {
+  const text = String(value || '').trim();
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(text);
+  if (short) return ('#' + short[1] + short[1] + short[2] + short[2] + short[3] + short[3]).toLowerCase();
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+  const match = /^rgba?\(([^)]+)\)$/i.exec(text);
+  if (match) {
+    const parts = match[1].split(/[\s,/]+/).filter(Boolean);
+    if (parts.length >= 3) {
+      const channel = (part) => {
+        const n = parseFloat(part);
+        if (!isFinite(n)) return 0;
+        return Math.max(0, Math.min(255, Math.round(part.indexOf('%') !== -1 ? n * 2.55 : n)));
+      };
+      return '#' + [channel(parts[0]), channel(parts[1]), channel(parts[2])]
+        .map((n) => n.toString(16).padStart(2, '0')).join('');
+    }
+  }
+  return text;
+}
+
+let palette = readCanvasPalette();
+let tracks = {}, trackColors = {}, trackVisible = {};
+let trackColorIndex = {}, trackColorCustom = {};
 let usedColors = new Set();
-function getUniqueRandomColor(ip) {
-  let seed = 0;
-  const text = String(ip || '');
-  for (let i = 0; i < text.length; i++) {
-    seed = (seed * 131 + text.charCodeAt(i)) >>> 0;
-  }
+let replaying = false;
+let throttledDrawTracks = null, throttledUpdateLegend = null;
+let themeSubscription = null;
 
-  let color = null;
-  for (let attempt = 0; attempt < 128; attempt++) {
-    const s = (seed + attempt * 1103515245) >>> 0;
-    const r = (s * 97) % 255;
-    const g = (s * 57) % 255;
-    const b = (s * 31) % 255;
-    const candidate = `rgb(${r},${g},${b})`;
-    if (!usedColors.has(candidate)) {
-      color = candidate;
-      break;
+function nextSeriesIndex() {
+  const taken = new Set(Object.values(trackColorIndex));
+  for (let i = 0; i < palette.series.length; i++) {
+    if (!taken.has(i)) return i;
+  }
+  return Object.keys(trackColorIndex).length % palette.series.length;
+}
+
+function assignTrackColor(ip) {
+  const index = nextSeriesIndex();
+  trackColorIndex[ip] = index;
+  trackColorCustom[ip] = false;
+  trackColors[ip] = palette.series[index % palette.series.length];
+  if (trackColors[ip]) usedColors.add(trackColors[ip]);
+  return trackColors[ip];
+}
+
+function applyThemeToTracks() {
+  palette = readCanvasPalette();
+  usedColors.clear();
+  Object.keys(tracks).forEach((ip) => {
+    if (!trackColorCustom[ip]) {
+      const index = typeof trackColorIndex[ip] === 'number' ? trackColorIndex[ip] : 0;
+      trackColors[ip] = palette.series[index % palette.series.length];
     }
-    if (attempt === 127) {
-      console.warn('Failed to generate unique color for', ip);
-    }
-  }
+    if (trackColors[ip]) usedColors.add(trackColors[ip]);
+  });
+  updateLegend();
+  if (typeof window.drawTracks === 'function') window.drawTracks();
+}
 
-  if (!color) {
-    color = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
-  }
-
-  usedColors.add(color);
-  console.log('Assigned color for', ip, ':', color);
-  return color;
+function subscribeToThemeChanges() {
+  if (themeSubscription) return;
+  themeSubscription = onThemeChange(applyThemeToTracks);
 }
 
 // Track canvas state (global for replay/fit functions)
@@ -85,7 +142,7 @@ function initialize() {
     drawTracks();
   });
 
-  document.getElementById('clear-tracks').addEventListener('click', () => { tracks = {}; usedColors.clear(); updateLegend(); drawTracks(); });
+  document.getElementById('clear-tracks').addEventListener('click', () => { tracks = {}; usedColors.clear(); trackColorIndex = {}; trackColorCustom = {}; updateLegend(); drawTracks(); });
   document.getElementById('replay-tracks').addEventListener('click', () => { replayTracks(); });
   document.getElementById('fit-window').addEventListener('click', () => { fitToWindow(); });
   function niceStep(pxPerUnit, targetPx = 80) {
@@ -101,9 +158,10 @@ function initialize() {
     return best;
   }
   function drawTracks() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw axes
-    ctx.strokeStyle = '#ddd';
+    ctx.fillStyle = palette.background;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Draw axes (the crosshair is the grid; ticks below use the axis stroke)
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
     // Horizontal axis
@@ -115,8 +173,9 @@ function initialize() {
     ctx.stroke();
 
     // Draw ticks and labels
+    ctx.strokeStyle = palette.axis;
     ctx.font = '12px Arial';
-    ctx.fillStyle = '#666';
+    ctx.fillStyle = palette.text;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -154,7 +213,8 @@ function initialize() {
     Object.keys(tracks).forEach(ip => {
       if (!trackVisible[ip]) return;
       const pts = tracks[ip];
-      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[ip] || 'black';
+      const color = trackColors[ip] || palette.series[0];
+      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = color;
       for (let i = 0; i < pts.length; i++) {
         const px = centerX + pts[i].x * trackScale;
         const py = centerY - pts[i].y * trackScale; // inverted y
@@ -162,7 +222,7 @@ function initialize() {
       }
       ctx.stroke();
       const lastp = pts[pts.length - 1]; if (lastp) {
-        ctx.fillStyle = trackColors[ip] || 'black';
+        ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(centerX + lastp.x * trackScale, centerY - lastp.y * trackScale, 4, 0, Math.PI * 2);
         ctx.fill();
@@ -188,9 +248,9 @@ function updateLegend() {
     const lastPos = tracks[ip][tracks[ip].length - 1];
     const posLabel = document.createElement('span'); posLabel.className = 'track-item-pos'; posLabel.textContent = lastPos ? `(${lastPos.x.toFixed(2)}, ${lastPos.y.toFixed(2)})` : '(No pos)';
     const colorBox = document.createElement('div'); colorBox.className = 'track-item-color'; colorBox.style.background = trackColors[ip];
-    const colorInput = document.createElement('input'); colorInput.type = 'color'; colorInput.value = rgbToHex(trackColors[ip]); colorInput.style.display = 'none';
+    const colorInput = document.createElement('input'); colorInput.type = 'color'; colorInput.value = cssColorToHex(trackColors[ip]); colorInput.style.display = 'none';
     colorBox.addEventListener('click', () => colorInput.click());
-    colorInput.addEventListener('input', (e) => { trackColors[ip] = e.target.value; colorBox.style.background = e.target.value; window.drawTracks(); });
+    colorInput.addEventListener('input', (e) => { trackColors[ip] = e.target.value; trackColorCustom[ip] = true; colorBox.style.background = e.target.value; window.drawTracks(); });
     const toggle = document.createElement('input'); toggle.className = 'track-item-visible'; toggle.type = 'checkbox'; toggle.checked = trackVisible[ip] !== false;
     toggle.addEventListener('change', () => { trackVisible[ip] = toggle.checked; window.drawTracks(); });
     header.appendChild(ipLabel);
@@ -200,11 +260,6 @@ function updateLegend() {
     item.appendChild(posLabel);
     container.appendChild(item);
   });
-}
-
-function rgbToHex(rgb) {
-  const [r, g, b] = rgb.match(/\d+/g).map(Number);
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
 function replayTracks() {
@@ -218,9 +273,10 @@ function replayTracks() {
   (function step() {
     const el = Date.now() - start;
     const nowT = minT + (el / dur) * (maxT - minT);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = palette.background;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     // Redraw axes and ticks as in drawTracks
-    ctx.strokeStyle = '#ddd';
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, centerY);
@@ -234,7 +290,8 @@ function replayTracks() {
     Object.keys(tracks).forEach(ip => {
       if (!trackVisible[ip]) return;
       const pts = tracks[ip].filter(p => p.t <= nowT);
-      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = trackColors[ip];
+      const color = trackColors[ip] || palette.series[0];
+      ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = color;
       for (let i = 0; i < pts.length; i++) {
         const px = centerX + pts[i].x * trackScale;
         const py = centerY - pts[i].y * trackScale;
@@ -273,7 +330,7 @@ function recordPosition(ip, data) {
     if (typeof x === 'number' && typeof y === 'number' && !isNaN(x) && !isNaN(y)) {
       if (!tracks[ip]) {
         tracks[ip] = [];
-        trackColors[ip] = getUniqueRandomColor(ip);
+        assignTrackColor(ip);
         trackVisible[ip] = true;
         if (throttledUpdateLegend) throttledUpdateLegend();
       }
@@ -300,10 +357,14 @@ function removeDevice(ip) {
       delete tracks[ip];
       delete trackColors[ip];
       delete trackVisible[ip];
+      delete trackColorIndex[ip];
+      delete trackColorCustom[ip];
       if (throttledUpdateLegend) throttledUpdateLegend();
       if (typeof window.drawTracks === 'function') window.drawTracks();
     }
 }
+
+subscribeToThemeChanges();
 
 return { initialize, recordPosition, removeDevice, getCacheData: () => ({ tracks, trackColors, trackVisible, usedColors }) };
 }

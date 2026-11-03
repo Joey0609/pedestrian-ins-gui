@@ -14,14 +14,14 @@ function renderAppUpdateModal() {
   const isDownloaded = appUpdateUi.stage === 'downloaded';
   const notes = escapeHtml(appUpdateUi.notes || '本次版本包含功能优化与问题修复。').replace(/\n/g, '<br>');
   const body = isDownloading
-    ? `<div style="margin:18px 0 8px;color:#4b5563">正在下载 v${escapeHtml(appUpdateUi.version)}，请勿关闭程序。</div>
-       <div style="height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.max(0, Math.min(100, appUpdateUi.percent))}%;background:linear-gradient(90deg,#2563eb,#06b6d4);transition:width .25s ease"></div></div>
-       <div style="margin-top:8px;text-align:right;font-variant-numeric:tabular-nums;color:#2563eb;font-weight:600">${appUpdateUi.percent}%</div>
-       ${appUpdateUi.error ? `<div style="margin-top:10px;color:#dc2626">下载失败：${escapeHtml(appUpdateUi.error)}</div>` : ''}`
+    ? `<div style="margin:18px 0 8px;color:var(--text-secondary)">正在下载 v${escapeHtml(appUpdateUi.version)}，请勿关闭程序。</div>
+       <div style="height:10px;background:var(--bg-sunken);border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.max(0, Math.min(100, appUpdateUi.percent))}%;background:linear-gradient(90deg,var(--primary),var(--primary-light));transition:width .25s ease"></div></div>
+       <div style="margin-top:8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--primary);font-weight:600">${appUpdateUi.percent}%</div>
+       ${appUpdateUi.error ? `<div style="margin-top:10px;color:var(--danger-strong)">下载失败：${escapeHtml(appUpdateUi.error)}</div>` : ''}`
     : isDownloaded
-      ? `<div style="margin:18px 0;color:#166534;line-height:1.7">v${escapeHtml(appUpdateUi.version)} 已下载完成。重启程序后将自动完成安装。</div>`
-      : `<div style="margin:12px 0;color:#4b5563">当前版本：<strong>v${escapeHtml(appUpdateUi.currentVersion)}</strong><br>最新版本：<strong style="color:#2563eb">v${escapeHtml(appUpdateUi.version)}</strong></div>
-         <div style="margin-top:12px;padding:12px;background:#f5f7fb;border-radius:8px;line-height:1.65;max-height:190px;overflow-y:auto"><div style="font-weight:600;margin-bottom:6px">更新内容</div>${notes}</div>`;
+      ? `<div style="margin:18px 0;color:var(--success-text);line-height:1.7">v${escapeHtml(appUpdateUi.version)} 已下载完成。重启程序后将自动完成安装。</div>`
+      : `<div style="margin:12px 0;color:var(--text-secondary)">当前版本：<strong>v${escapeHtml(appUpdateUi.currentVersion)}</strong><br>最新版本：<strong style="color:var(--primary)">v${escapeHtml(appUpdateUi.version)}</strong></div>
+         <div style="margin-top:12px;padding:12px;background:var(--bg-main);border-radius:8px;line-height:1.65;max-height:190px;overflow-y:auto"><div style="font-weight:600;margin-bottom:6px">更新内容</div>${notes}</div>`;
   const actions = isDownloading
     ? ''
     : isDownloaded

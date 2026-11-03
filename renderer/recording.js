@@ -9,6 +9,16 @@ let recordingStartTime = null;
 
 // IMU sensor configuration
 const BMI088_NUM = 4; // 0..3 actual sensors, 4 is combined/average
+const ALL_SENSORS_SLOTS = 1; // all_sensors firmware carries a single IMU
+
+// The number of sensor columns depends on the device family: the 4-IMU board
+// records 4 sensors plus the averaged slot, the all_sensors board records one.
+function sensorSlotsFor(data) {
+  const count = Number(data && data.sensorCount);
+  if (Number.isFinite(count) && count > 0) return count;
+  if (data && data.protocolFamily === 'all_sensors') return ALL_SENSORS_SLOTS;
+  return BMI088_NUM + 1;
+}
 
 function startRecording() {
   recording = true;
@@ -17,8 +27,11 @@ function startRecording() {
   recordingStartTime = new Date();
   
   const btn = document.getElementById('btn-record');
-  btn.classList.add('recording');
-  btn.innerHTML = `<span class="record-dot"></span><span class="record-text">0 条</span>`;
+  const dot = btn?.querySelector('.record-dot');
+  const textEl = btn?.querySelector('.record-text');
+  btn?.classList.add('recording');
+  if (dot) dot.hidden = false;
+  if (textEl) textEl.textContent = '0 条';
   
   showNotification('开始录制数据', 'success');
 }
@@ -26,7 +39,7 @@ function startRecording() {
 function updateRecordingCount() {
   if (!recording) return;
   const btn = document.getElementById('btn-record');
-  const textEl = btn.querySelector('.record-text');
+  const textEl = btn?.querySelector('.record-text');
   if (textEl) {
     textEl.textContent = `${recordingCount} 条`;
   }
@@ -34,17 +47,18 @@ function updateRecordingCount() {
 
 function recordIMUData(ip, data) {
   if (!recording || !data) return;
-  
+  const slots = sensorSlotsFor(data);
+
   // Initialize storage for this IP if not exists
   if (!recordingData[ip]) {
     recordingData[ip] = {};
-    for (let s = 0; s < BMI088_NUM + 1; s++) {
+    for (let s = 0; s < slots; s++) {
       recordingData[ip][s] = [];
     }
   }
-  
+
   // For each sensor, create a row
-  for (let s = 0; s < BMI088_NUM + 1; s++) {
+  for (let s = 0; s < slots; s++) {
     const row = {
       timestamp: data.timestamp,
       // raw_accel (3)
@@ -136,8 +150,11 @@ async function stopRecording() {
   recording = false;
   
   const btn = document.getElementById('btn-record');
-  btn.classList.remove('recording');
-  btn.innerHTML = '录制';
+  const dot = btn?.querySelector('.record-dot');
+  const textEl = btn?.querySelector('.record-text');
+  btn?.classList.remove('recording');
+  if (dot) dot.hidden = true;
+  if (textEl) textEl.textContent = '录制';
   
   // Prepare files
   const files = [];
@@ -146,7 +163,8 @@ async function stopRecording() {
   for (const ip of Object.keys(recordingData)) {
     const ipForFilename = ip.replace(/\./g, '');
     
-    for (let s = 0; s < BMI088_NUM + 1; s++) {
+    for (const slotKey of Object.keys(recordingData[ip] || {})) {
+      const s = Number(slotKey);
       const rows = recordingData[ip][s];
       if (rows && rows.length > 0) {
         const filename = `imudata_${timeStr}_${ipForFilename}_sensor${s}.csv`;
@@ -207,7 +225,7 @@ function showRecordingSavedModal(savedFiles) {
       <h3 style="margin:0">录制完成</h3>
       ${modalCloseButton('closeRecordingModal')}
     </div>
-    <div class="recording-stats" style="margin-bottom:16px;padding:12px;background:#f0f7ff;border-radius:8px">
+    <div class="recording-stats" style="margin-bottom:16px;padding:12px;background:var(--primary-soft);border-radius:8px">
       <div style="display:flex;gap:20px">
         <div><strong>录制条数：</strong>${recordingCount} 条</div>
         <div><strong>文件数量：</strong>${savedFiles.length} 个</div>

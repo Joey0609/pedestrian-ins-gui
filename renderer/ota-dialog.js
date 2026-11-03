@@ -1,4 +1,4 @@
-import { escapeHtml, formatBytesForOta, otaRowKey } from './utils.js';
+﻿import { escapeHtml, formatBytesForOta, otaRowKey } from './utils.js';
 import { modalCloseButton } from './dialogs.js';
 
 export function createOtaDialog({ electronAPI, getConnections, getTransportTypeById, listConns, dialogs, showNotification }) {
@@ -312,7 +312,7 @@ function showOtaModal() {
       <div class="ota-footer">
         <div id="ota-footer-hint" class="ota-subtitle">等待开始升级</div>
         <div class="ota-footer-actions">
-          <button id="ota-start-btn">开始升级</button>
+          <button id="ota-start-btn" class="primary">开始升级</button>
           <button id="ota-interrupt-btn" class="secondary">中断升级</button>
         </div>
       </div>

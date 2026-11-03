@@ -1,4 +1,4 @@
-import { enhanceSelect } from './ui-controls.js';
+﻿import { enhanceSelect } from './ui-controls.js';
 import { createScanTooltip } from './scan-tooltip.js';
 import { modalCloseButton } from './dialogs.js';
 import { escapeHtml } from './utils.js';
@@ -9,10 +9,10 @@ let hostIp = null;
 let scanAbortRequested = false;
 const SERIAL_SCAN_MAX_CONCURRENCY = 8;
 const COLORS = {
-  offline: 'red',
-  ping: '#FFC107',       // ping ok (橙黄色)
-  green: '#00FF00',
-  black: '#444444'
+  offline: 'var(--danger)',
+  ping: 'var(--warning)',       // ping ok (橙黄色)
+  green: 'var(--success)',
+  black: 'var(--text-tertiary)'
 };
 
 function updateProgress(percent) {
@@ -28,7 +28,7 @@ function updateProgress(percent) {
       bar = document.createElement('div'); bar.id = 'scanProgressBar'; bar.style.height = '4px'; bar.style.marginTop = '8px';
       dialogs.content.appendChild(bar);
     }
-    bar.style.width = `${percent}%`; bar.style.background = '#2b6ef6';
+    bar.style.width = `${percent}%`; bar.style.background = 'var(--primary)';
   }
 }
 
@@ -297,7 +297,7 @@ async function showSerialScanModal() {
       <div class="serial-modal-footer">
         <div id="serialScanProgress" class="serial-progress">正在获取串口列表...</div>
         <div class="serial-modal-actions">
-          <button id="serialRescanBtn">重新扫描</button>
+          <button id="serialRescanBtn" class="primary">重新扫描</button>
           <button id="serialCloseBtn" class="secondary">确认</button>
         </div>
       </div>
@@ -371,7 +371,7 @@ function showSubnetSelectModalWithMemory(subnets, callback) {
   const html = `<div class="subnet-dialog">
     <div class="subnet-dialog-header"><h3>选择子网</h3><div class="subnet-dialog-tools"><button type="button" id="refreshSubnets" class="modal-icon-button" aria-label="刷新子网" title="刷新子网"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-15.36-6.36L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.36 6.36L21 16"/><path d="M16 16h5v5"/></svg></button>${modalCloseButton('closeSubnetX')}</div></div>
     <select id="subnetSelect">${subnets.map(s => `<option value="${encodeURIComponent(JSON.stringify(s))}" data-primary="${escapeHtml(`${s.base}/${s.cidr}`)}" data-detail="${escapeHtml(s.ifname || 'if')}">${escapeHtml(`${s.base}/${s.cidr} (${s.ifname || 'if'})`)}</option>`).join('')}</select>
-    <div class="subnet-dialog-actions"><button id="confirmSubnet">确认</button></div>
+    <div class="subnet-dialog-actions"><button id="confirmSubnet" class="primary">确认</button></div>
   </div>`;
   dialogs.show(html);
   // close X

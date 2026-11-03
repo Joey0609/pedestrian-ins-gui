@@ -1,0 +1,264 @@
+/* ==========================================================================
+   Theme tokens — primitives + semantic aliases
+   --------------------------------------------------------------------------
+   Layer 1 (primitives): --wj-*: raw palette values, never used by components.
+   Layer 2 (semantic):   --bg-*, --text-*, --border-*, --primary-* …
+                        Components only ever reference layer 2.
+
+   Theme selection is an attribute on <html>: data-theme="light" | "dark".
+   renderer/theme.js resolves the user preference (system/light/dark) into it,
+   and index.html applies it before first paint to avoid a flash.
+   ========================================================================== */
+
+:root {
+  /* ---- primitives: neutral ramp (light) ---- */
+  --wj-n-0: #ffffff;
+  --wj-n-25: #fbfcfe;
+  --wj-n-50: #f5f7fb;
+  --wj-n-100: #f0f3f9;
+  --wj-n-150: #e6e9f0;
+  --wj-n-200: #dce4ef;
+  --wj-n-300: #c3cedd;
+  --wj-n-400: #a4b0c2;
+  --wj-n-500: #8692a5;
+  --wj-n-600: #6b7280;
+  --wj-n-700: #4b5563;
+  --wj-n-800: #334155;
+  --wj-n-900: #1f2937;
+  --wj-n-950: #0f172a;
+  --wj-n-1000: #0b1220;
+
+  /* ---- primitives: brand / status ---- */
+  --wj-blue-50: #eff6ff;
+  --wj-blue-100: #dbeafe;
+  --wj-blue-200: #bfdbfe;
+  --wj-blue-300: #93c5fd;
+  --wj-blue-400: #5a8ff8;
+  --wj-blue-500: #3b82f6;
+  --wj-blue-600: #2b6ef6;
+  --wj-blue-700: #1a5ad4;
+  --wj-blue-800: #1548ad;
+  --wj-green-400: #34d399;
+  --wj-green-500: #22c55e;
+  --wj-green-600: #16a34a;
+  --wj-amber-400: #fbbf24;
+  --wj-amber-500: #f59e0b;
+  --wj-orange-500: #f97316;
+  --wj-orange-600: #ea580c;
+  --wj-orange-800: #9a3412;
+  --wj-red-400: #f87171;
+  --wj-red-500: #ef4444;
+  --wj-red-600: #dc2626;
+
+  /* ---- surfaces ---- */
+  --bg-main: var(--wj-n-50);
+  --bg-card: var(--wj-n-0);
+  --bg-elevated: var(--wj-n-0);
+  --bg-subtle: #f8fafc;
+  --bg-sunken: var(--wj-n-100);
+  --bg-inset: #f8fbff;
+  --bg-hover: rgba(43, 110, 246, 0.08);
+  --bg-active: rgba(43, 110, 246, 0.14);
+  --bg-selected: #edf4ff;
+  --bg-selected-strong: #e5efff;
+  --bg-topbar: #ffffff;
+  --bg-bottombar: #ffffff;
+  --bg-monitor: #f8fafc;
+
+  /* ---- borders ---- */
+  --border-light: var(--wj-n-150);
+  --border-strong: var(--wj-n-200);
+  --border-subtle: #eef2f9;
+  --border-focus: rgba(43, 110, 246, 0.3);
+
+  /* ---- text ---- */
+  --text-primary: #1a1a2e;
+  --text-secondary: var(--wj-n-600);
+  --text-tertiary: var(--wj-n-500);
+  --text-inverse: #ffffff;
+  --text-on-primary: #ffffff;
+
+  /* ---- brand ---- */
+  --primary: var(--wj-blue-600);
+  --primary-light: var(--wj-blue-400);
+  --primary-hover: var(--wj-blue-700);
+  --primary-active: var(--wj-blue-800);
+  --primary-soft: #edf4ff;
+  --primary-softer: rgba(43, 110, 246, 0.08);
+  --primary-border: #dbe7ff;
+  --on-primary: #ffffff;
+  /* legacy alias kept for existing rules */
+  --primary-dark: var(--primary-hover);
+
+  /* ---- status ---- */
+  --success: var(--wj-green-500);
+  --success-strong: var(--wj-green-600);
+  --success-soft: #dcfce7;
+  --success-text: #15803d;
+  --warning: var(--wj-amber-500);
+  --warning-strong: var(--wj-orange-600);
+  --warning-soft: #fff7ed;
+  --warning-border: rgba(245, 158, 11, 0.55);
+  --warning-text: var(--wj-orange-800);
+  --danger: var(--wj-red-500);
+  --danger-strong: var(--wj-red-600);
+  --danger-soft: #fee2e2;
+  --danger-text: #b91c1c;
+  /* neutral (non-brand) fill used by secondary buttons */
+  --neutral-fill: #6b7280;
+  --neutral-fill-hover: #4b5563;
+  --on-neutral: #ffffff;
+
+  /* ---- effects ---- */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 28px 80px rgba(15, 35, 75, 0.22), 0 4px 16px rgba(15, 35, 75, 0.08);
+  --shadow-pop: 0 16px 44px rgba(25, 50, 90, 0.14), 0 3px 10px rgba(25, 50, 90, 0.05);
+  --shadow-up: 0 -2px 10px rgba(0, 0, 0, 0.04);
+  --overlay: rgba(16, 30, 56, 0.34);
+  --tooltip-bg: rgba(17, 24, 39, 0.94);
+  --tooltip-text: #ffffff;
+  --scrollbar-thumb: #cad5e6;
+  --skeleton: #eef2f9;
+
+  /* ---- data visualisation ---- */
+  --viz-bg: #ffffff;
+  --viz-grid: rgba(15, 23, 42, 0.1);
+  --viz-axis: rgba(15, 23, 42, 0.35);
+  --viz-text: var(--wj-n-600);
+  --viz-model: #8fbcd4;
+  --viz-model-accent: #8fb3ff;
+  --viz-ambient: #ffffff;
+  --series-1: #2b6ef6;
+  --series-2: #22c55e;
+  --series-3: #f59e0b;
+  --series-4: #a855f7;
+  --series-5: #06b6d4;
+  --series-6: #ef4444;
+
+  /* ---- motion / type / shape ---- */
+  --transition-fast: 0.2s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 13px;
+  --font-lg: 15px;
+  --font-xl: 18px;
+  --titlebar-height: 40px;
+
+  color-scheme: light;
+}
+
+/* ==========================================================================
+   Dark theme — only the semantic layer changes.
+   ========================================================================== */
+:root[data-theme="dark"] {
+  /* primitives: neutral ramp (dark, slightly blue-shifted) */
+  --wj-n-0: #0b0d10;
+  --wj-n-25: #12151a;
+  --wj-n-50: #0f1115;
+  --wj-n-100: #121418;
+  --wj-n-150: #21252c;
+  --wj-n-200: #2b3038;
+  --wj-n-300: #3a404a;
+  --wj-n-400: #59616d;
+  --wj-n-500: #7c8593;
+  --wj-n-600: #9aa3b2;
+  --wj-n-700: #b6bdc9;
+  --wj-n-800: #ced4de;
+  --wj-n-900: #e2e6ec;
+  --wj-n-950: #eef1f5;
+  --wj-n-1000: #f7f9fc;
+
+  --bg-main: #0f1115;
+  --bg-card: #16181d;
+  --bg-elevated: #1c1f25;
+  --bg-subtle: #1a1d22;
+  --bg-sunken: #121418;
+  --bg-inset: #191c21;
+  --bg-hover: rgba(122, 166, 255, 0.14);
+  --bg-active: rgba(122, 166, 255, 0.22);
+  --bg-selected: rgba(90, 143, 248, 0.18);
+  --bg-selected-strong: rgba(90, 143, 248, 0.26);
+  --bg-topbar: #16181d;
+  --bg-bottombar: #16181d;
+  --bg-monitor: #1a1d22;
+
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-focus: rgba(122, 166, 255, 0.55);
+
+  --text-primary: #e8eaee;
+  --text-secondary: #9aa3b2;
+  --text-tertiary: #7c8593;
+  --text-inverse: #0f1115;
+  --text-on-primary: #06122b;
+
+  --primary: #5a8ff8;
+  --primary-light: #7aa6ff;
+  --primary-hover: #7aa6ff;
+  --primary-active: #93b6ff;
+  --primary-soft: rgba(90, 143, 248, 0.16);
+  --primary-softer: rgba(90, 143, 248, 0.1);
+  --primary-border: rgba(90, 143, 248, 0.35);
+  --on-primary: #06122b;
+  --primary-dark: var(--primary-hover);
+
+  --success: #34d399;
+  --success-strong: #10b981;
+  --success-soft: rgba(52, 211, 153, 0.16);
+  --success-text: #6ee7b7;
+  --warning: #fbbf24;
+  --warning-strong: #f59e0b;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --warning-border: rgba(251, 191, 36, 0.45);
+  --warning-text: #fcd34d;
+  --danger: #f87171;
+  --danger-strong: #ef4444;
+  --danger-soft: rgba(248, 113, 113, 0.16);
+  --danger-text: #fca5a5;
+  --neutral-fill: #333a44;
+  --neutral-fill-hover: #414a56;
+  --on-neutral: #e8eaee;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 28px 80px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, 0.66), 0 3px 10px rgba(0, 0, 0, 0.4);
+  --shadow-up: 0 -6px 18px rgba(0, 0, 0, 0.5);
+  --overlay: rgba(3, 6, 12, 0.62);
+  --tooltip-bg: #23262b;
+  --tooltip-text: #e8eaee;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --skeleton: #24282f;
+
+  --viz-bg: #16181d;
+  --viz-grid: rgba(255, 255, 255, 0.08);
+  --viz-axis: rgba(255, 255, 255, 0.3);
+  --viz-text: #9aa3b2;
+  --viz-model: #9cc7e2;
+  --viz-model-accent: #7aa6ff;
+  --viz-ambient: #dfe8ff;
+  --series-1: #7aa6ff;
+  --series-2: #4ade80;
+  --series-3: #fbbf24;
+  --series-4: #c084fc;
+  --series-5: #22d3ee;
+  --series-6: #f87171;
+
+  color-scheme: dark;
+}
