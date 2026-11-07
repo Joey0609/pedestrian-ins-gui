@@ -1,0 +1,176 @@
+﻿<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>track preview</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--bg-main); color: var(--text-primary); font-family: var(--font-sans, system-ui); }
+    #content { height: 100%; padding: 12px; box-sizing: border-box; }
+    #page-device-track { display: block; height: 100%; }
+  </style>
+</head>
+<body>
+<div id="content">
+  <div id="page-device-track" class="page active">
+    <canvas id="track-canvas"></canvas>
+
+    <div class="track-hud track-hud-top-left">
+      <div id="track-chips" class="track-chips"></div>
+    </div>
+
+    <div class="track-hud track-hud-top-right">
+      <div class="track-seg" id="track-window-toggle" role="group" aria-label="轨迹时间窗">
+        <button type="button" data-sec="5">5s</button>
+        <button type="button" data-sec="30">30s</button>
+        <button type="button" data-sec="0" class="active">全部</button>
+      </div>
+      <button type="button" id="track-replay" class="track-icon-btn" title="回放">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+      </button>
+      <button type="button" id="track-panel-toggle" class="track-icon-btn" title="轨迹设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+
+    <div class="track-hud track-hud-bottom-left">
+      <div class="track-compass" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/></svg>
+        <span>N</span>
+      </div>
+      <div class="track-scale">
+        <div class="track-scale-bar" id="track-scale-bar"></div>
+        <span id="track-scale-label">—</span>
+      </div>
+    </div>
+
+    <div class="track-hud track-hud-bottom-right">
+      <button type="button" id="track-zoom-out" class="track-icon-btn" title="缩小">−</button>
+      <button type="button" id="track-zoom-in" class="track-icon-btn" title="放大">+</button>
+      <button type="button" id="track-fit" class="track-icon-btn" title="适应窗口">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      </button>
+      <span id="track-zoom-label" class="track-zoom-label">100%</span>
+    </div>
+
+    <div id="track-tooltip" class="track-tooltip hidden" aria-hidden="true"></div>
+
+    <aside id="track-panel" class="track-panel" aria-hidden="true">
+      <div class="track-panel-head">
+        <strong>轨迹设置</strong>
+        <button type="button" id="track-panel-close" class="track-icon-btn" title="关闭">×</button>
+      </div>
+      <div class="track-panel-actions">
+        <button type="button" id="fit-window">适应窗口</button>
+        <button type="button" id="clear-tracks">清空轨迹</button>
+      </div>
+      <div class="track-hint">
+        <span class="track-hint-item"><span class="track-hint-mark track-hint-start"></span>起点</span>
+        <span class="track-hint-item"><span class="track-hint-mark track-hint-current"></span>当前</span>
+        <span class="track-hint-item">滚轮缩放 · 拖拽平移</span>
+      </div>
+      <div id="track-legend"></div>
+    </aside>
+  </div>
+</div>
+<script type="module">
+  import { createTracks } from './tracks.js';
+  const tracks = createTracks();
+  tracks.initialize();
+
+  // three synthetic walkers with distinct, map-like paths
+  function roundedRectLoop(w, h, r, laps, noise) {
+    const pts = [];
+    const corners = [
+      [w - r, r, -Math.PI / 2, 0], [w - r, h - r, 0, Math.PI / 2],
+      [r, h - r, Math.PI / 2, Math.PI], [r, r, Math.PI, Math.PI * 1.5],
+    ];
+    for (let lap = 0; lap < laps; lap++) {
+      for (let side = 0; side < 4; side++) {
+        const [cx, cy, a0, a1] = corners[side];
+        for (let i = 0; i <= 18; i++) {
+          const a = a0 + (a1 - a0) * (i / 18);
+          pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+        }
+        const next = corners[(side + 1) % 4];
+        if (side < 3) {
+          const [nx, ny] = next;
+          for (let i = 1; i <= 24; i++) {
+            const k = i / 24;
+            pts.push({ x: pts[pts.length - 1].x + (nx - cx) * k * 0.02, y: pts[pts.length - 1].y });
+          }
+        }
+      }
+    }
+    return pts.map((p) => ({
+      x: p.x + (Math.random() - 0.5) * noise,
+      y: p.y + (Math.random() - 0.5) * noise,
+    }));
+  }
+
+  function corridorOutAndBack(len, offset) {
+    const pts = [];
+    for (let i = 0; i <= 90; i++) pts.push({ x: (len * i) / 90, y: 0 });
+    for (let i = 1; i <= 30; i++) {
+      const a = (Math.PI * i) / 30;
+      pts.push({ x: len + Math.sin(a) * 0.8, y: -offset / 2 + Math.cos(a) * offset / 2 - offset / 2 });
+    }
+    for (let i = 90; i >= 0; i--) pts.push({ x: (len * i) / 90, y: -offset });
+    return pts;
+  }
+
+  function zigzag(segments, width, run) {
+    const pts = [];
+    for (let s = 0; s < segments; s++) {
+      const y0 = s % 2 === 0 ? 0 : run;
+      const y1 = s % 2 === 0 ? run : 0;
+      for (let i = 0; i <= 40; i++) {
+        const k = i / 40;
+        pts.push({ x: (width * (s + k)) , y: y0 + (y1 - y0) * k });
+      }
+    }
+    return pts;
+  }
+
+  const devices = [
+    { ip: '192.168.1.10', pts: roundedRectLoop(12, 8, 1.6, 2, 0.18), origin: [0, 0], color: null },
+    { ip: '192.168.1.11', pts: corridorOutAndBack(14, 0.7), origin: [0, 0], color: null },
+    { ip: '192.168.1.12', pts: zigzag(4, 1, 4), origin: [0, 0], color: null },
+  ];
+  // spread them so all three are visible side by side
+  devices[1].origin = [16, 6];
+  devices[2].origin = [34, -2];
+
+  // recordPosition stamps Date.now(): spoof it so the fake run has a realistic
+  // timeline (40 ms per sample) instead of everything landing in the same millisecond
+  const realNow = Date.now;
+  let fakeNow = realNow() - 120000;
+  Date.now = () => { fakeNow += 40; return fakeNow; };
+  try {
+    for (const d of devices) {
+      let prev = null;
+      for (const p of d.pts) {
+        const yaw = prev ? Math.atan2(p.y - prev.y, p.x - prev.x) : 0;
+        tracks.recordPosition(d.ip, {
+          displacement: [[p.x, p.y]],
+          eular: [[0, 0, yaw]],
+        });
+        prev = p;
+      }
+      if (d.origin[0] || d.origin[1]) tracks.setOrigin(d.ip, d.origin[0], d.origin[1]);
+    }
+  } finally {
+    Date.now = realNow;
+  }
+
+  setTimeout(() => document.getElementById('track-fit').click(), 300);
+  window.__preview = {
+    setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      window.dispatchEvent(new CustomEvent('wj:themechange', { detail: { theme, preference: theme } }));
+    },
+  };
+</script>
+</body>
+</html>

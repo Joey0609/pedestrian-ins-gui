@@ -1,10 +1,10 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width,initial-scale=1" name="viewport"/>
     <title>IMU GUI</title>
-    <link href="./uplot.css" rel="stylesheet">
+    <!-- 曲线渲染器自带样式，无需 uPlot 样式表 -->
     <style>
         /* ===== 全局样式 ===== */
         :root{
@@ -139,7 +139,7 @@
         .plot-chart{height:310px;width:100%;min-width:0;cursor:crosshair;max-width:100%;overflow:hidden}
         .plot-empty{padding:12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);text-align:center}
 
-        /*.uplot{height:220px}*/
+        
 
         /* 设置区（拖拽轨道） */
         .palette{display:flex;flex-wrap:wrap;gap:8px;padding:8px;border-radius:8px;background:linear-gradient(90deg,transparent,var(--surface-soft))}
@@ -564,8 +564,8 @@
     </main>
 </div>
 
-<!-- uPlot -->
-<script src="./uplot.js"></script>
+<!-- 实时曲线渲染器：环形缓冲 + 像素聚合，替代 uPlot -->
+<script src="./realtime-plot.js"></script>
 <script src="./imuDataProcessor.js"></script>
 <script>
     // ===== 主题初始化（跟随主窗口 theme.css 的 data-theme 约定） =====
@@ -580,7 +580,7 @@
         if (!data || data.type !== 'wj-theme') return;
         document.documentElement.dataset.theme = data.theme === 'dark' ? 'dark' : 'light';
     });
-    // 主题切换后让 uPlot 用新变量重建坐标轴/网格（监听器在图表初始化后注册）。
+    // 主题切换后通知曲线渲染器刷新调色板/网格（监听器在图表初始化后注册）。
     window.addEventListener('message', function (event) {
         var data = event.data;
         if (!data || data.type !== 'wj-theme') return;
@@ -617,7 +617,10 @@
     let currentDeviceIp = '';
     let currentTransport = '';
     let lastTs = null;
-    let buffers = {}; // 存放历史数据用于 uPlot
+    let buffers = {}; // 历史数据（保留给表头统计/量程计算）
+// 曲线渲染用的环形缓冲：写入 O(1)，绘制时按像素列聚合，避免每帧切片与 GC
+const plotStore = window.RealtimePlot.createStore();
+
     let isPlotViewActive = false;
     let plots = {main: null};
     let visibleSeries = []; // 当前主图的 series 列表
@@ -710,6 +713,7 @@
     function initBuffers() {
         // 存 timestamp + 若干序列，统一以 timestamp 数组为第0列
         buffers = {t: []};
+        plotStore.clear();
     }
 
     initBuffers();
@@ -1366,9 +1370,9 @@
         }
     }
 
-    // ===== Buffers 与多图卡 uPlot 数据管理 =====
+    // ===== Buffers 与多图卡实时曲线数据管理 =====
     const MAX_POINTS = 5000;
-    const PLOT_MAX_FPS = 30;
+    const PLOT_MAX_FPS = 60;
     const PLOT_MIN_FRAME_MS = 1000 / PLOT_MAX_FPS;
     // 系列颜色全部来自 CSS 变量（--chart-1..6），浅/深主题各有一套，绘制时读取。
     const PLOT_COLOR_VARS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6'];
@@ -1500,12 +1504,15 @@
             : ((typeof msg.ts === 'number') ? msg.ts : Date.now() * 1000);
 
         buffers.t.push(ts);
+        plotStore.pushTime(ts / 1000000);
 
         neededKeys.forEach(key => {
             if (!Array.isArray(buffers[key])) {
                 buffers[key] = new Array(Math.max(0, buffers.t.length - 1)).fill(NaN);
             }
-            buffers[key].push(getValueByPlotBufferKey(msg, key));
+            const value = getValueByPlotBufferKey(msg, key);
+            buffers[key].push(value);
+            plotStore.push(key, value);
         });
 
         if (buffers.t.length > MAX_POINTS) {
@@ -1575,20 +1582,9 @@
         card.state.xOffsetSec = 0;
         card.state.autoX = true;
 
-        let yMin = Number.POSITIVE_INFINITY;
-        let yMax = Number.NEGATIVE_INFINITY;
-        for (let axis = 0; axis < card.dims; axis++) {
-            if (!card.axisEnabled[axis]) continue;
-            const key = `${card.type}_${card.sensor}_${axis}`;
-            const src = buffers[key] || [];
-            for (let i = 0; i < src.length; i++) {
-                const v = src[i];
-                if (!isFinite(v)) continue;
-                if (v < yMin) yMin = v;
-                if (v > yMax) yMax = v;
-            }
-        }
-        const y = (isFinite(yMin) && isFinite(yMax)) ? ensureYRange(yMin, yMax) : {min: -1, max: 1};
+        // 量程直接从渲染器的可见窗口统计，不再扫描数组
+        const bounds = card.plot ? card.plot.bounds() : { min: Infinity, max: -Infinity };
+        const y = (isFinite(bounds.min) && isFinite(bounds.max)) ? ensureYRange(bounds.min, bounds.max) : {min: -1, max: 1};
         card.state.yMin = y.min;
         card.state.yMax = y.max;
         card.state.autoY = true;
@@ -1604,117 +1600,54 @@
         };
     }
 
-    function createCardPlot(card, seriesData) {
-        if (card.plot) card.plot.destroy();
-        const theme = getUplotTheme();
-        const series = [{label: 'Time (s)'}];
-        for (let i = 0; i < card.dims; i++) {
-            series.push({
-                label: `axis${i}`,
-                stroke: plotColor(i),
-                width: 1,
-                show: card.axisEnabled[i] !== false,
-                spanGaps: true,
-                points: {show: false}
-            });
-        }
-        card.plot = new uPlot({
-            width: card.chartEl.clientWidth || 600,
-            height: 310,
-            legend: {show: false},
-            series,
-            scales: {x: {time: false, auto: false}, y: {auto: false}},
-            axes: [
-                {label: 'time(s)', stroke: theme.axis, grid: {stroke: theme.grid}, ticks: {stroke: theme.axis}},
-                {label: 'value', stroke: theme.axis, grid: {stroke: theme.grid}, ticks: {stroke: theme.axis}}
-            ],
-            cursor: {drag: {x: false, y: false}, points: {show: false}}
-        }, seriesData, card.chartEl);
+    function cardPlotKeys(card) {
+        const keys = [];
+        for (let axis = 0; axis < card.dims; axis++) keys.push(`${card.type}_${card.sensor}_${axis}`);
+        return keys;
     }
 
-    // xAll 对所有卡片是同一份数据（同一时间轴），每次刷新只算一遍
-    function computeXAxis(t) {
-        const latest = t[t.length - 1];
-        const xAll = new Array(t.length);
-        for (let i = 0; i < t.length; i++) xAll[i] = (t[i] - latest) / 1000000;
-        return xAll;
-    }
-
-    function refreshPlotCard(card, sharedXAll) {
+    // 把卡片状态（轴可见性、时间窗、量程、暂停）同步到渲染器
+    function syncCardPlot(card) {
         if (!card || !card.plot) return;
-        const width = Math.max(1, card.chartEl.clientWidth || 600);
-        if (card.plot.width !== width || card.plot.height !== 310) card.plot.setSize({width, height: 310});
-        const t = buffers.t || [];
-        if (t.length === 0) {
-            card.plot.setData([[]]);
-            return;
-        }
-
-        const xAll = sharedXAll || computeXAxis(t);
+        const visible = [];
+        for (let axis = 0; axis < card.dims; axis++) visible.push(card.axisEnabled[axis] !== false);
+        card.plot.setAxesVisible(visible);
         const historySec = getHistorySeconds();
-        const {xMin, xMax} = getXWindowByState(card.state, historySec);
+        card.plot.setWindow(card.state.autoX ? Math.max(0.5, historySec || 5) : card.state.xRangeSec);
+        card.plot.setOffset(card.state.xOffsetSec);
+        card.plot.setAutoY(card.state.autoY);
+        if (!card.state.autoY) card.plot.setYRange(card.state.yMin, card.state.yMax);
+        card.plot.setPaused(card.state.paused);
+        card.plot.render();
+    }
 
-        let startIdx = 0;
-        while (startIdx < xAll.length && xAll[startIdx] < xMin) startIdx++;
-        let endIdx = xAll.length;
-        while (endIdx > startIdx && xAll[endIdx - 1] > xMax) endIdx--;
-
-        const xSlice = xAll.slice(startIdx, endIdx);
-        const seriesData = [xSlice];
-
-        for (let axis = 0; axis < card.dims; axis++) {
-            const key = `${card.type}_${card.sensor}_${axis}`;
-            const src = buffers[key] || [];
-            let arr = src.slice(startIdx, endIdx);
-            if (!card.axisEnabled[axis]) arr = new Array(xSlice.length).fill(NaN);
-            seriesData.push(arr);
-            // setSeries 会重建图例，只有可见性真正变化时才调用
-            const visible = card.axisEnabled[axis] !== false;
-            if (!card.appliedAxisVisible || card.appliedAxisVisible[axis] !== visible) {
-                if (!card.appliedAxisVisible) card.appliedAxisVisible = [];
-                card.appliedAxisVisible[axis] = visible;
-                card.plot.setSeries(axis + 1, {show: visible, stroke: plotColor(axis)});
-            }
+    function createCardPlot(card) {
+        if (card.plot) {
+            card.plot.destroy();
+            card.plot = null;
         }
+        const keys = cardPlotKeys(card);
+        const colors = keys.map((_, axis) => plotColor(axis));
+        card.plotKeys = keys;
+        card.plot = window.RealtimePlot.create(card.chartEl, {
+            dims: card.dims,
+            colors,
+            windowSec: card.state.xRangeSec || 5,
+            autoY: card.state.autoY,
+            yMin: card.state.yMin,
+            yMax: card.state.yMax,
+        });
+        card.plot.bind(plotStore, keys);
+        syncCardPlot(card);
+    }
 
-        card.plot.setData(seriesData);
-        card.plot.setScale('x', {min: xMin, max: xMax});
-
-        if (card.state.autoY) {
-            let yMin = Number.POSITIVE_INFINITY;
-            let yMax = Number.NEGATIVE_INFINITY;
-            for (let i = 1; i < seriesData.length; i++) {
-                if (!card.axisEnabled[i - 1]) continue;
-                const arr = seriesData[i];
-                for (let j = 0; j < arr.length; j++) {
-                    const v = arr[j];
-                    if (!isFinite(v)) continue;
-                    if (v < yMin) yMin = v;
-                    if (v > yMax) yMax = v;
-                }
-            }
-            if (isFinite(yMin) && isFinite(yMax)) {
-                const y = ensureYRange(yMin, yMax);
-                card.state.yMin = y.min;
-                card.state.yMax = y.max;
-            } else {
-                card.state.yMin = -1;
-                card.state.yMax = 1;
-            }
-        }
-        const yFinal = ensureYRange(card.state.yMin, card.state.yMax);
-        card.state.yMin = yFinal.min;
-        card.state.yMax = yFinal.max;
-        card.plot.setScale('y', {min: card.state.yMin, max: card.state.yMax});
+    function refreshPlotCard(card) {
+        syncCardPlot(card);
     }
 
     function refreshAllPlotCards() {
         if (!plotCards.length) return;
-        const t = buffers.t || [];
-        const sharedXAll = t.length ? computeXAxis(t) : null;
-        plotCards.forEach(card => {
-            if (!card.state.paused) refreshPlotCard(card, sharedXAll);
-        });
+        plotCards.forEach(card => syncCardPlot(card));
     }
 
     function removePlotCard(cardId) {
@@ -1770,7 +1703,7 @@
                 </div>
             </div>
             <div class="axis-toggles" data-role="axes"></div>
-            <div class="uplot plot-chart" data-role="chart"></div>
+            <div class="plot-chart" data-role="chart"></div>
         `;
 
         const chartEl = root.querySelector('[data-role="chart"]');
@@ -1896,7 +1829,7 @@
         });
 
         plotCardsEl.appendChild(root);
-        createCardPlot(card, Array.from({length: dims + 1}, () => []));
+        createCardPlot(card);
         updateCardButtons(card);
         plotCards.push(card);
         updatePlotEmpty();
@@ -1918,9 +1851,14 @@
     });
 
     window.addEventListener('plot-theme-changed', () => {
+        // 换主题只需刷新调色板并重画，不重建画布/缓冲
+        const palette = window.RealtimePlot.readPalette(document.documentElement);
         plotCards.forEach(card => {
-            createCardPlot(card, Array.from({length: card.dims + 1}, () => []));
-            refreshPlotCard(card);
+            if (!card.plot) return;
+            card.plot.setPalette(palette);
+            const colors = cardPlotKeys(card).map((_, axis) => plotColor(axis));
+            card.plot.setColors ? card.plot.setColors(colors) : null;
+            syncCardPlot(card);
         });
     });
 

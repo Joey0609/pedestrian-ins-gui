@@ -75,17 +75,64 @@
       <div id="grid"></div>
     </div>
     <div id="page-device-track" class="page">
-      <div id="track-sidebar">
-        <div id="track-controls">
-          <button id="clear-tracks">清空轨迹</button>
-          <button id="fit-window">适应窗口</button>
-          <button id="replay-tracks">回放轨迹</button>
+      <canvas id="track-canvas"></canvas>
+
+      <div class="track-hud track-hud-top-left">
+        <div id="track-chips" class="track-chips"></div>
+      </div>
+
+      <div class="track-hud track-hud-top-right">
+        <div class="track-seg" id="track-window-toggle" role="group" aria-label="轨迹时间窗">
+          <button type="button" data-sec="5">5s</button>
+          <button type="button" data-sec="30">30s</button>
+          <button type="button" data-sec="0" class="active">全部</button>
+        </div>
+        <button type="button" id="track-replay" class="track-icon-btn" title="回放轨迹（空格）" aria-label="回放轨迹">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+        </button>
+        <button type="button" id="track-panel-toggle" class="track-icon-btn" title="轨迹设置" aria-label="轨迹设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
+
+      <div class="track-hud track-hud-bottom-left">
+        <div class="track-compass" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/></svg>
+          <span>N</span>
+        </div>
+        <div class="track-scale">
+          <div class="track-scale-bar" id="track-scale-bar"></div>
+          <span id="track-scale-label">—</span>
+        </div>
+      </div>
+
+      <div class="track-hud track-hud-bottom-right">
+        <button type="button" id="track-zoom-out" class="track-icon-btn" title="缩小" aria-label="缩小">−</button>
+        <button type="button" id="track-zoom-in" class="track-icon-btn" title="放大" aria-label="放大">+</button>
+        <button type="button" id="track-fit" class="track-icon-btn" title="适应窗口（双击画布）" aria-label="适应窗口">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+        <span id="track-zoom-label" class="track-zoom-label">100%</span>
+      </div>
+
+      <div id="track-tooltip" class="track-tooltip hidden" aria-hidden="true"></div>
+
+      <aside id="track-panel" class="track-panel" aria-hidden="true">
+        <div class="track-panel-head">
+          <strong>轨迹设置</strong>
+          <button type="button" id="track-panel-close" class="track-icon-btn" title="关闭" aria-label="关闭">×</button>
+        </div>
+        <div class="track-panel-actions">
+          <button type="button" id="fit-window">适应窗口</button>
+          <button type="button" id="clear-tracks">清空轨迹</button>
+        </div>
+        <div class="track-hint">
+          <span class="track-hint-item"><span class="track-hint-mark track-hint-start"></span>起点</span>
+          <span class="track-hint-item"><span class="track-hint-mark track-hint-current"></span>当前</span>
+          <span class="track-hint-item">滚轮缩放 · 拖拽平移</span>
         </div>
         <div id="track-legend"></div>
-      </div>
-      <div id="track-main">
-        <canvas id="track-canvas"></canvas>
-      </div>
+      </aside>
     </div>
     <!-- Device detail pages container - dynamically created iframes -->
     <div id="device-pages-container"></div>

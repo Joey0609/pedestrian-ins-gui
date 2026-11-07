@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    Theme tokens — primitives + semantic aliases
    --------------------------------------------------------------------------
    Layer 1 (primitives): --wj-*: raw palette values, never used by components.
@@ -122,6 +122,10 @@
   --skeleton: #eef2f9;
 
   /* ---- data visualisation ---- */
+  --track-map-bg: #f7f9f7;
+  --track-map-tint: #eef3f1;
+  --track-grid-minor: rgba(83, 113, 117, 0.06);
+  --track-grid-major: rgba(83, 113, 117, 0.12);
   --viz-bg: #ffffff;
   --viz-grid: rgba(15, 23, 42, 0.1);
   --viz-axis: rgba(15, 23, 42, 0.35);
@@ -246,6 +250,10 @@
   --scrollbar-thumb: rgba(255, 255, 255, 0.18);
   --skeleton: #24282f;
 
+  --track-map-bg: #171b22;
+  --track-map-tint: #111820;
+  --track-grid-minor: rgba(164, 188, 205, 0.07);
+  --track-grid-major: rgba(164, 188, 205, 0.14);
   --viz-bg: #16181d;
   --viz-grid: rgba(255, 255, 255, 0.08);
   --viz-axis: rgba(255, 255, 255, 0.3);

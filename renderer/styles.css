@@ -1,4 +1,4 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    Renderer styles
    --------------------------------------------------------------------------
    Colour comes exclusively from renderer/theme.css tokens (light + dark).
@@ -578,11 +578,7 @@ button.primary:active {
 
 /* ===== Track Canvas ===== */
 #track-canvas {
-  background: var(--bg-card); 
-  border: 1px solid var(--border-light); 
-  border-radius: var(--radius-md);
-  width: 100%; 
-  height: calc(100% - 48px);
+  background: var(--bg-card);
 }
 
 #track-legend {
@@ -1217,39 +1213,261 @@ select:focus {
 .notification.show {margin-top: 10px;}
 
 /* ===== Track Page ===== */
-#page-device-track { 
-  display: flex; 
+#page-device-track {
+  position: relative;
   height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--track-map-bg, var(--viz-bg, var(--bg-card)));
 }
 
-#track-sidebar { 
-  width: 260px; 
-  padding: 16px; 
-  background: var(--bg-sunken); 
-  border-right: 1px solid var(--border-light); 
+#track-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+/* ---- floating HUD ------------------------------------------------------ */
+.track-hud {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.track-hud > * { pointer-events: auto; }
+.track-hud-top-left { top: 14px; left: 14px; }
+.track-hud-top-right { top: 14px; right: 14px; }
+.track-hud-bottom-left {
+  bottom: 22px; left: 14px; gap: 14px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.track-hud-bottom-right {
+  bottom: 22px; right: 14px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.track-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.track-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--primary-border);
+}
+.track-icon-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.track-icon-btn svg { width: 16px; height: 16px; }
+
+.track-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.track-seg button {
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+.track-seg button:hover { color: var(--text-primary); background: var(--bg-hover); }
+.track-seg button.active { background: var(--primary-soft); color: var(--primary); }
+
+.track-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.track-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
+}
+.track-chip:hover { border-color: var(--primary-border); color: var(--text-primary); }
+.track-chip.selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--text-primary);
+}
+.track-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.track-chip-ip { font-weight: 600; }
+.track-chip-pos {
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-compass {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+.track-compass svg { width: 18px; height: 18px; }
+
+.track-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+}
+.track-scale-bar {
+  height: 6px;
+  min-width: 20px;
+  border: 1px solid var(--text-tertiary);
+  border-top: 0;
+  border-radius: 0 0 3px 3px;
+}
+.track-zoom-label {
+  min-width: 38px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.track-tooltip {
+  position: fixed;
+  z-index: 60;
+  min-width: 160px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  pointer-events: none;
+}
+.track-tooltip.hidden { display: none; }
+.track-tooltip-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.track-tooltip-dot { width: 8px; height: 8px; border-radius: 50%; }
+.track-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.track-tooltip-row strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
   overflow-y: auto;
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
-}
-
-#track-main { 
-  flex: 1; 
-  display: flex; 
-  flex-direction: column; 
-  padding: 16px;
   background: var(--bg-card);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-left: 1px solid var(--border-light);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(100%);
+  transition: transform var(--dur-base) var(--ease-standard);
 }
+.track-panel.open { transform: translateX(0); }
+.track-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.track-panel-actions { display: flex; gap: 8px; }
+.track-panel-actions button { flex: 1; }
 
-#track-controls { 
-  display: flex; 
-  gap: 8px; 
-  margin-bottom: 12px;
+/* 轨迹图例说明：起点 / 当前 / 操作提示 */
+.track-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
+  margin: 4px 0 12px;
+  padding: 6px 2px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs);
 }
-
-#track-controls button {
-  flex: 1;
-  min-width: 100px;
+.track-hint-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.track-hint-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+  box-sizing: border-box;
+}
+.track-hint-start {
+  background: transparent;
+}
+.track-hint-current {
+  background: var(--text-tertiary);
+  border-color: var(--text-tertiary);
 }
 
 .track-item { 
@@ -1286,6 +1504,47 @@ select:focus {
   font-size: var(--font-sm); 
   color: var(--text-secondary);
   font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+}
+
+/* 每个设备的初始位置（米）：让轨迹不必从 (0,0) 开始 */
+.track-origin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-sm);
+  color: var(--text-tertiary);
+}
+.track-origin-label {
+  flex: none;
+}
+.track-origin-input {
+  width: 62px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+}
+.track-origin-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+.track-origin-reset {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.track-origin-reset:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .track-item-color { 
